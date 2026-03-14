@@ -1,0 +1,13 @@
+{
+  "name": "reddit-ceo-characteristics-scrape",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format:check": "prettier --check \"**/*.{md,yaml,yml,json}\"",
+    "format:fix": "prettier --write \"**/*.{md,yaml,yml,json}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0"
+  }
+}

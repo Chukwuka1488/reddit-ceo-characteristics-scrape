@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Node (prettier)
+node_modules/
+
+# Data - raw and large files stay local, never committed
+data/discovery/subreddit_metadata_raw/
+data/raw/
+data/filtered/
+*.zst
+*.duckdb
+*.duckdb.wal
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Secrets
+.env
+
+# Research papers (binary, not versioned)
+*.docx
+*.pdf
+
+# Pytest
+.pytest_cache/
+
+# aria2
+*.aria2
