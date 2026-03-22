@@ -454,10 +454,51 @@ lens):
 - Updated CSV: `data/discovery/candidate_subreddits.csv` (decision column
   populated)
 
-**Next step:** Download approved subreddits from the per-subreddit data torrent.
-The torrent contains the top 40K subreddits — all 81 approved subs are
-well-known and will be included. Actual .zst file sizes will be known once the
-torrent client connects and lists files.
+**Step 1 is COMPLETE.**
+
+---
+
+## Next Steps (to resume)
+
+When resuming this project, pick up from here in order:
+
+**1. Build the CEO Universe Table (Step 0A)**
+
+- Process `data/discovery/snp1500.xls` into
+  `data/reference/ceo_universe.parquet`
+- Filter to S&P 500 (`spcode = 'SP'`), extract unique (company, ticker, CEO
+  name, CEO start/end dates) tuples
+- Generate name variants for each CEO (Step 0B) for use in Reddit comment
+  matching
+
+**2. Download approved subreddits (Step 2)**
+
+- Use the per-subreddit Academic Torrents torrent (hash:
+  `3e3f64dee22dc304cdd2546254ca1f8e8ae542b4`) to download .zst files for the 81
+  approved subreddits
+- Configure torrent client to select only the approved subs
+- Verify downloads with checksums
+- Estimated size: 50-200GB temporary disk usage
+
+**3. Stream, filter, and store CEO-relevant comments (Step 3)**
+
+- Stream each .zst file, regex-match against CEO name patterns from Step 0B
+- Write matched comments to Parquet, partitioned by year/subreddit
+- Checkpoint after each .zst file for resumability
+- Delete raw .zst files after verification
+
+**4. Validate Layer 1 output (Step 4)**
+
+- Coverage report: comments per CEO per year
+- False positive sampling: manual review of 200-500 matched comments
+- Deduplication across subreddits
+
+**5. Resolve remaining architecture decisions**
+
+- Decision 5: Layer 2 processing — Colab session management, batch sizing,
+  checkpointing for FinBERT GPU scoring
+- Decision 6: Additional trait dimensions — narcissism dictionary is small (13
+  words), may need expansion. Decide priority order for scoring passes.
 
 ---
 

@@ -36,8 +36,8 @@ discrepancy.
 ### Data Engineering
 
 - **Stream, Don't Load:** Never load an entire file into memory. Stream
-  decompress, process in batches, flush to disk. This is non-negotiable with
-  our 32GB RAM constraint.
+  decompress, process in batches, flush to disk. This is non-negotiable with our
+  32GB RAM constraint.
 - **Checkpoint Everything:** Every step must be resumable. If a process crashes
   at row 5M of 22M, it must resume from row 5M — not restart.
 - **Schema on Write:** Define the schema before writing data. No schemaless
@@ -74,8 +74,8 @@ discrepancy.
   script" with "fix gitignore."
 - **Never Commit Data:** All data files are in .gitignore. Code is versioned,
   data is not.
-- **Document Decisions:** Architecture tradeoffs go in ARCHITECTURE_DECISIONS.md,
-  not in code comments.
+- **Document Decisions:** Architecture tradeoffs go in
+  ARCHITECTURE_DECISIONS.md, not in code comments.
 
 ## Conventions
 
@@ -95,5 +95,6 @@ discrepancy.
 
 ## Current Phase
 
-Step 1: Subreddit discovery — loading 22M subreddit metadata into DuckDB for
-analysis and filtering.
+Step 1 (Subreddit Discovery) is COMPLETE. 81 subreddits approved from 22M
+candidates. Next: build CEO Universe Table (Step 0A), then download approved
+subreddits (Step 2). See `docs/LAYER1_PIPELINE.md` "Next Steps" section.
