@@ -1,9 +1,9 @@
 """Tests for subreddit metadata loading pipeline.
 
-Tests three concerns separately:
+Tests:
 - parse_subreddit: JSON parsing and field extraction
 - streaming: zstd decompression line streaming
-- load_subreddit_metadata: DuckDB batch loading and idempotency
+- load_subreddit_metadata: DuckDB native read_json loading
 """
 
 import json
@@ -13,14 +13,9 @@ import duckdb
 import pytest
 import zstandard
 
+from src.ceo_reddit.discovery.load_subreddit_metadata import load_into_duckdb
 from src.ceo_reddit.discovery.parse_subreddit import extract_record
-from src.ceo_reddit.discovery.load_subreddit_metadata import (
-    CREATE_TABLE_SQL,
-    INSERT_SQL,
-    load_into_duckdb,
-)
 from src.ceo_reddit.utils.streaming import stream_zst_lines
-
 
 # --- Helpers ---
 
@@ -50,11 +45,11 @@ def make_subreddit_json(**overrides) -> str:
 
 
 def make_zst_file(tmp_path: Path, lines: list[str]) -> Path:
-    """Create a zstd-compressed file from lines."""
+    """Create a zstd-compressed NDJSON file from lines."""
     raw = "\n".join(lines).encode("utf-8")
     zst_path = tmp_path / "test.zst"
     cctx = zstandard.ZstdCompressor()
-    with open(zst_path, "wb") as f:
+    with zst_path.open("wb") as f:
         f.write(cctx.compress(raw))
     return zst_path
 
@@ -84,8 +79,8 @@ class TestExtractRecord:
 
         assert record is not None
         assert record[0] == "minimal"
-        assert record[4] is None  # subscribers
-        assert record[10] is None  # num_comments
+        assert record[4] is None
+        assert record[10] is None
 
     def test_invalid_json_returns_none(self) -> None:
         assert extract_record("not valid json{{{") is None
@@ -142,14 +137,40 @@ class TestLoadIntoDuckdb:
         zst_path = make_zst_file(tmp_path, lines)
         db_path = tmp_path / "test.duckdb"
 
-        stats = load_into_duckdb(zst_path, db_path, batch_size=10)
+        stats = load_into_duckdb(zst_path, db_path)
 
         assert stats["total_rows"] == 2
-        assert stats["skipped"] == 0
 
         con = duckdb.connect(str(db_path))
         count = con.execute("SELECT count(*) FROM subreddits").fetchone()[0]
         assert count == 2
+        con.close()
+
+    def test_correct_column_mapping(self, tmp_path: Path) -> None:
+        lines = [
+            make_subreddit_json(
+                display_name="stocks",
+                subscribers=5000000,
+                advertiser_category="Finance",
+                over18=False,
+            ),
+        ]
+        zst_path = make_zst_file(tmp_path, lines)
+        db_path = tmp_path / "test.duckdb"
+
+        load_into_duckdb(zst_path, db_path)
+
+        con = duckdb.connect(str(db_path))
+        row = con.execute(
+            "SELECT subreddit_name, subscribers, advertiser_category, over18, "
+            "num_comments, num_posts FROM subreddits"
+        ).fetchone()
+        assert row[0] == "stocks"
+        assert row[1] == 5000000
+        assert row[2] == "Finance"
+        assert row[3] is False
+        assert row[4] == 10000  # from _meta
+        assert row[5] == 500  # from _meta
         con.close()
 
     def test_idempotent(self, tmp_path: Path) -> None:
@@ -157,40 +178,12 @@ class TestLoadIntoDuckdb:
         zst_path = make_zst_file(tmp_path, lines)
         db_path = tmp_path / "test.duckdb"
 
-        load_into_duckdb(zst_path, db_path, batch_size=10)
-        load_into_duckdb(zst_path, db_path, batch_size=10)
+        load_into_duckdb(zst_path, db_path)
+        load_into_duckdb(zst_path, db_path)
 
         con = duckdb.connect(str(db_path))
         count = con.execute("SELECT count(*) FROM subreddits").fetchone()[0]
-        assert count == 1  # Not 2
-        con.close()
-
-    def test_skips_invalid_json(self, tmp_path: Path) -> None:
-        lines = [
-            make_subreddit_json(display_name="good"),
-            "not valid json{{{",
-            make_subreddit_json(display_name="also_good"),
-        ]
-        zst_path = make_zst_file(tmp_path, lines)
-        db_path = tmp_path / "test.duckdb"
-
-        stats = load_into_duckdb(zst_path, db_path, batch_size=10)
-
-        assert stats["total_rows"] == 2
-        assert stats["skipped"] == 1
-
-    def test_null_fields_stored(self, tmp_path: Path) -> None:
-        lines = [json.dumps({"display_name": "nosubs"})]
-        zst_path = make_zst_file(tmp_path, lines)
-        db_path = tmp_path / "test.duckdb"
-
-        load_into_duckdb(zst_path, db_path, batch_size=10)
-
-        con = duckdb.connect(str(db_path))
-        result = con.execute(
-            "SELECT subscribers FROM subreddits WHERE subreddit_name = 'nosubs'"
-        ).fetchone()
-        assert result[0] is None
+        assert count == 1
         con.close()
 
     def test_returns_stats(self, tmp_path: Path) -> None:
@@ -198,10 +191,8 @@ class TestLoadIntoDuckdb:
         zst_path = make_zst_file(tmp_path, lines)
         db_path = tmp_path / "test.duckdb"
 
-        stats = load_into_duckdb(zst_path, db_path, batch_size=2)
+        stats = load_into_duckdb(zst_path, db_path)
 
-        assert "total_rows" in stats
-        assert "skipped" in stats
+        assert stats["total_rows"] == 5
         assert "elapsed_seconds" in stats
         assert "rows_per_second" in stats
-        assert stats["total_rows"] == 5
