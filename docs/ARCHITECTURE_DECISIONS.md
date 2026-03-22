@@ -106,33 +106,23 @@ baselines alongside FinBERT model-based scoring.
 
 ---
 
-## Decision 4: Temporal Alignment — OPEN
+## Decision 4: Temporal Alignment and Extraction Strategy — DECIDED
 
-Layer 1 stores all comments with timestamps. Windowing (90-day pre-earnings)
-happens at analysis time by joining against an earnings calendar.
+Principle: **collect broadly, filter narrowly at analysis time.**
 
-**Q4.1: Decoupled extraction?**
-
-Store all CEO-relevant comments, join to earnings windows at analysis time.
-
-**Your answer:**
-
----
-
-**Q4.2: Earnings calendar source?**
-
-WRDS StreetEvents or Compustat quarterly?
-
-**Your answer:**
-
----
-
-**Q4.3: Reddit coverage threshold?**
-
-Keep everything and filter at analysis, or enforce 20+ posts/CEO/year during
-extraction?
-
-**Your answer:**
+- **Decoupled extraction (Q4.1):** Yes. Layer 1 stores ALL CEO-relevant comments
+  with timestamps. Windowing to 90-day pre-earnings windows happens at analysis
+  time by joining against the earnings calendar. This allows experimenting with
+  different window sizes (60, 90, 120 days) without reprocessing Reddit data.
+- **Earnings calendar source (Q4.2):** WRDS StreetEvents. Same source as
+  earnings call transcripts, so announcement dates come bundled. One source for
+  both transcripts and timing.
+- **Reddit coverage threshold (Q4.3):** Keep everything, filter at analysis
+  time. A CEO might have low mentions in one subreddit but sufficient coverage
+  across multiple subreddits — we can't know total coverage until all subreddits
+  are processed. Sub-threshold CEO-quarters may still be useful for robustness
+  checks. The 20 posts/CEO/year minimum from the paper is enforced during
+  analysis, not during extraction.
 
 ---
 
