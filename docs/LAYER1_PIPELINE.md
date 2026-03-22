@@ -1,7 +1,7 @@
 # Layer 1 Pipeline: Collection and Filtering
 
-**Runs on:** Local Ubuntu machine (32GB RAM, 2TB disk)
-**Output:** Parquet files of all CEO-relevant Reddit comments 2005-2025
+**Runs on:** Local Ubuntu machine (32GB RAM, 2TB disk) **Output:** Parquet files
+of all CEO-relevant Reddit comments 2005-2025
 
 ---
 
@@ -11,17 +11,16 @@
 
 - Source: ExecuComp via WRDS
 - Output: `data/reference/ceo_universe.parquet`
-- Schema: company, ticker, ceo_legal_name, ceo_common_name,
-  ceo_name_variants[], sp500_entry_date, sp500_exit_date, ceo_start_date,
-  ceo_end_date
+- Schema: company, ticker, ceo_legal_name, ceo_common_name, ceo_name_variants[],
+  sp500_entry_date, sp500_exit_date, ceo_start_date, ceo_end_date
 - ~1000+ CEO-company-year tuples
 
 **0B — CEO Name Search Patterns**
 
 - Input: CEO Universe Table
 - Output: `data/reference/search_patterns.parquet`
-- Variants per CEO: full name, reversed name, "CEO of {company}",
-  "{company} CEO", company + "CEO"
+- Variants per CEO: full name, reversed name, "CEO of {company}", "{company}
+  CEO", company + "CEO"
 
 ---
 
@@ -30,162 +29,435 @@
 Goal: Build a queryable database of all subreddits with metadata so we can
 analyze and filter for relevance.
 
-### Step 1A — Download subreddit metadata
+### Step 1A — Download subreddit metadata (COMPLETED)
 
-**Completed prerequisites:**
-
-- [x] `aria2c` installed (`sudo apt install aria2`)
-- [x] Directory created: `data/discovery/subreddit_metadata_raw/`
-
-**Magnet link** (Academic Torrents download URLs require a browser session, so
-we use the magnet link for CLI):
-
-```
-magnet:?xt=urn:btih:5d0bf258a025a5b802572ddc29cde89bf093185c&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce
-```
-
-**Download command:**
-
-```bash
-cd /home/harkeybour/Desktop/reddit-ceo-characteristics-scrape
-
-aria2c \
-  --dir=data/discovery/subreddit_metadata_raw \
-  --seed-time=0 \
-  "magnet:?xt=urn:btih:5d0bf258a025a5b802572ddc29cde89bf093185c&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
-```
-
-**Notes:**
-
-- Downloads all 4 files (2.65GB total). `--show-files` / `--select-file` do not
-  work with magnet links — they require a local .torrent file.
-- `--seed-time=0` stops seeding after download completes
-- We only need `subreddits_2025-01.zst` (2.24GB). Delete the other 3 files
-  after download:
+- **Source:** Academic Torrents — "Reddit subreddits metadata, rules and wikis
+  2025-01" (torrent hash: `5d0bf258a025a5b802572ddc29cde89bf093185c`)
+- **Tool:** `aria2c` (installed via `sudo apt install aria2`)
+- **Command:**
   ```bash
-  cd data/discovery/subreddit_metadata_raw/reddit/subreddits/
-  rm subreddits_meta_only_2025-01.zst subreddit_rules_2025-01.zst subreddit_wikis_2025-01.zst
+  aria2c \
+    --dir=data/discovery/subreddit_metadata_raw \
+    --seed-time=0 \
+    "magnet:?xt=urn:btih:5d0bf258a025a5b802572ddc29cde89bf093185c&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
   ```
-- Time: depends on bandwidth and torrent seeders
+- Downloads all 4 files (2.65GB). Only `subreddits_2025-01.zst` (2.1GB) needed.
+  Delete the other 3 after download.
+- **Result:** 2.1GB compressed, ~22M subreddit records in zstd NDJSON format.
+- **Time:** ~3 minutes on broadband.
 
-**Verify download:**
+### Step 1B — Load into DuckDB (COMPLETED)
 
-```bash
-# Check file exists and size is reasonable (~2.24GB)
-ls -lh data/discovery/subreddit_metadata_raw/reddit/subreddits/subreddits_2025-01.zst
+- **Script:** `src/ceo_reddit/discovery/load_subreddit_metadata.py`
+- **How it works:** DuckDB's native `read_json` reads zstd NDJSON directly — no
+  Python line-by-line parsing. DuckDB handles decompression, JSON parsing, and
+  column selection at C++ speed.
+- **Command:**
+  ```bash
+  source .venv/bin/activate
+  python3 -m src.ceo_reddit.discovery.load_subreddit_metadata
+  ```
+- **Result:** 21,865,531 rows loaded in 1.3 minutes (284,695 rows/sec).
+- **Output:** `data/discovery/subreddits.duckdb`
+- **Key lesson:** Initial approach used Python `zstandard` + `json.loads` +
+  `executemany` at 160 rows/sec (would have taken 38 hours). Letting DuckDB do
+  the work natively was 175x faster.
 
-# Peek at first 3 lines to confirm format (zstd-compressed NDJSON)
-zstdcat data/discovery/subreddit_metadata_raw/reddit/subreddits/subreddits_2025-01.zst \
-  | head -n 3 | python3 -m json.tool --no-ensure-ascii | head -n 50
-```
-
-### Step 1B — Install Python dependencies
-
-```bash
-cd /home/harkeybour/Desktop/reddit-ceo-characteristics-scrape
-
-# Activate existing venv
-source .venv/bin/activate
-
-# Install dependencies for this step
-pip install duckdb zstandard
-```
-
-### Step 1C — Load into DuckDB
-
-**Script:** `scripts/load_subreddit_metadata.py`
-
-The script does:
-
-1. Stream-decompress `subreddits_2025-01.zst` line by line
-2. Parse each JSON line, extract only the fields we need
-3. Batch-insert into DuckDB (10K rows per batch)
-4. 22M rows total — takes ~10-20 minutes
-
-**Fields we extract per subreddit:**
+**Schema loaded:**
 
 ```
-subreddit_name       — display_name
-description          — sidebar description (markdown)
-public_description   — short tagline
-subscribers          — subscriber count
-advertiser_category  — Reddit's topic classification
-over18               — NSFW flag
-created_utc          — subreddit creation timestamp
-subreddit_type       — public/private/restricted
-num_comments         — from _meta.num_comments
-num_posts            — from _meta.num_posts
+subreddit_name       VARCHAR  — display_name
+description          VARCHAR  — sidebar description (markdown)
+public_description   VARCHAR  — short tagline
+title                VARCHAR  — subreddit title
+subscribers          BIGINT   — subscriber count
+advertiser_category  VARCHAR  — Reddit's topic classification
+over18               BOOLEAN  — NSFW flag
+created_utc          BIGINT   — subreddit creation timestamp
+subreddit_type       VARCHAR  — public/private/restricted
+lang                 VARCHAR  — language
+num_comments         BIGINT   — total comment count
+num_posts            BIGINT   — total post count
+earliest_post_at     BIGINT   — first post timestamp
+earliest_comment_at  BIGINT   — first comment timestamp
 ```
 
-**Output:** `data/discovery/subreddits.duckdb`
+### Step 1C — Analyze and filter (IN PROGRESS)
 
-**Verify load:**
+- **Tool:** DBeaver connected to `data/discovery/subreddits.duckdb`
+- **Goal:** Query 22M subreddits to find those relevant to business, finance,
+  company discussion, and CEO mentions.
+- **Process:** Iterative — run queries, review results, refine filters.
+- **Output:** `data/discovery/candidate_subreddits.csv` (subreddit, category,
+  subscribers, num_comments, description, decision)
+- **Expected result:** ~92 candidate subreddits for human review
 
-```bash
-source .venv/bin/activate
-python3 -c "
-import duckdb
-con = duckdb.connect('data/discovery/subreddits.duckdb')
-print(con.sql('SELECT count(*) as total FROM subreddits').fetchone())
-print(con.sql('SELECT * FROM subreddits LIMIT 5').df())
-"
-```
+**Discovery queries (run in order):**
 
-### Step 1D — Analyze and filter
-
-Once loaded, query DuckDB to find relevant subreddits:
+**Query 1 — Data quality check:**
 
 ```sql
--- How many subreddits by advertiser_category
-SELECT advertiser_category, count(*) as cnt
-FROM subreddits
-WHERE subscribers > 1000
-GROUP BY advertiser_category
-ORDER BY cnt DESC;
+SELECT
+    count(*) AS total_subreddits,
+    count(CASE WHEN subscribers > 0 THEN 1 END) AS has_subscribers,
+    count(CASE WHEN advertiser_category != '' THEN 1 END) AS has_category,
+    count(CASE WHEN public_description != '' THEN 1 END) AS has_description
+FROM subreddits;
+```
 
--- Business/finance/investing subreddits with meaningful activity
+Result:
+
+- 21.8M total subreddits
+- 2.3M have subscribers (89% have zero — dead/empty subs)
+- **961 have advertiser_category** — useless as a filter
+- 7M have descriptions
+- **Decision:** Filter by descriptions and subscriber counts, not category.
+
+**Query 2 — Activity distribution by subscriber tier:**
+
+```sql
+SELECT
+    CASE
+        WHEN subscribers >= 1000000 THEN '1M+'
+        WHEN subscribers >= 100000 THEN '100K-1M'
+        WHEN subscribers >= 10000 THEN '10K-100K'
+        WHEN subscribers >= 1000 THEN '1K-10K'
+        WHEN subscribers > 0 THEN '1-1K'
+        ELSE 'zero'
+    END AS tier,
+    count(*) AS cnt,
+    sum(num_comments) AS total_comments
+FROM subreddits
+GROUP BY tier
+ORDER BY total_comments DESC;
+```
+
+Result:
+
+- **1M+ subs:** 1,153 subreddits, 8.7B comments (42%)
+- **100K-1M:** 8,257 subreddits, 7.5B comments (36%)
+- **10K-100K:** 32,656 subreddits, 3.3B comments (16%)
+- **1K-10K:** 96,665 subreddits, 567M comments (3%)
+- **1-1K:** 2,171,486 subreddits, 141M comments (<1%)
+- **zero:** 19,555,314 subreddits, 1.0B comments (5%)
+- **Decision:** Only subreddits with **10K+ subscribers** matter. That's ~42,000
+  subreddits containing 94% of all Reddit comments. The 19.5M zero-subscriber
+  subreddits are dead/empty.
+
+**Query 3 — Business/finance subreddits by description keywords:**
+
+```sql
 SELECT subreddit_name, subscribers, num_comments, public_description
 FROM subreddits
-WHERE over18 = false
-  AND subscribers > 5000
+WHERE subscribers >= 10000
+  AND over18 = false
   AND (
-    public_description ILIKE '%business%'
-    OR public_description ILIKE '%finance%'
+    public_description ILIKE '%stock%'
     OR public_description ILIKE '%invest%'
-    OR public_description ILIKE '%stock%'
+    OR public_description ILIKE '%finance%'
+    OR public_description ILIKE '%business%'
     OR public_description ILIKE '%CEO%'
     OR public_description ILIKE '%corporate%'
-    OR advertiser_category ILIKE '%business%'
-    OR advertiser_category ILIKE '%finance%'
+    OR public_description ILIKE '%earning%'
+    OR public_description ILIKE '%wall street%'
+    OR description ILIKE '%stock market%'
+    OR description ILIKE '%investing%'
+    OR description ILIKE '%fortune 500%'
+    OR description ILIKE '%S&P 500%'
   )
 ORDER BY subscribers DESC;
-
--- Company-specific subreddits (match against S&P 500 names)
--- Run after Step 0A (CEO Universe Table) is built
 ```
 
-- **Human decision point:** Review query results, tag subreddits as
-  relevant/not relevant
-- **Output:** `data/discovery/selected_subreddits.csv`
-  (subreddit, category, file_size_gb, relevance_reason, decision: yes/no)
-- **Expected result:** 20-50 subreddits
+Result:
 
----
+- **~500+ subreddits** returned
+- Too broad — keywords like "business", "stock", and "invest" match many
+  irrelevant subs (learning, gaming, crafts, foreign language finance subs, meme
+  stock subs, crypto-only subs)
+- Need to refine with company-specific matching
 
-## Step 1B (later) — Get per-subreddit data torrent file list
+**Query 4 — S&P 500 company name/ticker matching against subreddits:**
 
-After Step 1D identifies relevant subreddits, we need to confirm they exist in
-the per-subreddit data torrent and get their file sizes.
+- Data source: `data/discovery/snp1500.xls` (ExecuComp S&P 1500, 2010-2025)
+- Filtered to `spcode = 'SP'` (S&P 500) → 499 unique companies, 3,276 CEO rows
+- Extracted company first-word brands + tickers, matched against subreddit names
+- Result: **169 subreddit matches**, but many false positives
 
-```bash
-# Download only the .torrent file (not data) for the per-subreddit dataset
-# Torrent: "Subreddit comments/submissions 2005-06 to 2025-12"
-aria2c --show-files \
-  "https://academictorrents.com/download/3e3f64dee22dc304cdd2546254ca1f8e8ae542b4"
-```
+Actual company subs (keep):
 
-This shows the 40K file list. We cross-reference against our selected subreddits
-to confirm availability and get download sizes.
+- `apple`, `nvidia`, `Amd`, `intel`, `Costco`, `starbucks`, `walmart`
+- `boeing`, `Ford`, `microsoft`, `netflix`, `disney`, `uber`, `paypal`
+- `salesforce`, `IBM`, `Dell`, `Adobe`, `Comcast`, `kroger`, `verizon`
+- `CVS`, `FedEx`, `UPS`, `Chipotle`, `doordash`, `CoinBase`, `AirBnB`
+- `Hilton`, `marriott`, `Target`, `lululemon`, `Ebay`, `Nike`, `Cisco`
+- `crowdstrike`, `palantir`, `accenture`, `PLTR`, `TSLA`, `carvana`
+- `Schwab`, `fortinet`, `servicenow`, `dexcom`
+
+False positives (dropped):
+
+- `de` (Germany sub), `boston` (city), `texas` (state), `cat` (cats)
+- `pool`, `iron`, `ben`, `it`, `es`, `public`, `Home`, `analog`
+- `union`, `progressive` (politics), `dominion` (game), `arch` (architecture)
+- `keys`, `Fox` (animal), `match`, `coin`, `dash`, `delta` (math), `MLM`
+  (anti-MLM)
+
+**Decision:** Company-specific subreddits cannot be selected automatically by
+name alone. Require human review of each match.
+
+**Query 5 — Check for missing major company subreddits:**
+
+Manually checked for known large company subs not caught by automated matching
+(different naming conventions):
+
+- `teslamotors` (3.4M subs, 5.8M comments) — NOT `Tesla` (Nikola Tesla sub)
+- `google` (3.4M subs) — company name != ticker (GOOGL/GOOG)
+- `amazon` (234K subs) — ticker is AMZN
+- `tmobile` (190K subs), `ATT` (83K subs) — telecom
+- `HomeDepot` (105K subs), `Lowes` (65K subs) — retail
+- `facebook` (362K subs), `Twitter` (1.3M subs) — social media
+- `unitedairlines` (117K subs), `Honda` (222K subs) — transport
+
+**False positives removed from final list:**
+
+- `Tesla` → Nikola Tesla inventor sub, not Tesla Inc
+- `Hershey` → Hershey PA town sub
+- `blackstone` → Blackstone griddle cooking sub
+- All generic word matches (`de`, `boston`, `texas`, `cat`, etc.)
+
+**Final candidate list: `data/discovery/candidate_subreddits.csv`**
+
+92 subreddits across 8 categories, 535M total comments:
+
+- **news** (2 subs, 207M comments) — CEO mentions in news headlines
+- **finance_investing** (16 subs, 152M comments) — core financial discussion
+- **company** (57 subs, 87M comments) — company-specific communities
+- **news_tech** (2 subs, 33M comments) — tech industry/CEO coverage
+- **work_culture** (3 subs, 32M comments) — employee perspective on CEO behavior
+- **business_corporate** (6 subs, 17M comments) — general business discussion
+- **entertainment_biz** (1 sub, 5M comments) — box office / entertainment
+  business
+- **company_investor** (5 subs, 3M comments) — retail investor stock discussion
+
+**Human review process:** Reviewing candidates in batches of 10. Each subreddit
+evaluated for whether it contains discussion about S&P 500 CEOs and their
+behavior/decisions/leadership, not just company products or generic topics.
+
+**Batch 1 — General Finance/Investing:**
+
+Approved:
+
+- `wallstreetbets` — high volume CEO discussion alongside memes
+- `stocks` — serious stock discussions, CEO news
+- `investing` — general investing, CEO strategy discussion
+- `StockMarket` — trade ideas and market analysis, CEO impact
+- `finance` — finance news, CEO-related content
+- `economy` — economy, business, politics, stocks — CEO coverage
+- `ValueInvesting` — fundamental analysis includes CEO assessment
+- `dividends` — dividend investors discuss CEO capital allocation decisions
+- `FluentInFinance` — finance news and debate, CEO coverage
+
+Dropped:
+
+- `Daytrading` — focused on short-term price action and chart patterns, not CEO
+  discussion. Comments are about technical entries/exits, not leadership.
+- `options` — focused on Greeks, premium decay, and trade mechanics. Discussion
+  is about option strategies, not CEOs.
+
+**Batch 2 — Finance/Investing continued + Business:**
+
+Approved:
+
+- `Superstonk` — 29M comments, heavily focused on Ryan Cohen/GME but useful for
+  that specific CEO
+- `business` — general business news, CEO coverage
+- `Entrepreneur` — startups and business, CEO/founder discussion
+- `Accounting` — accountants discuss earnings quality, restatements, and audit
+  failures. They reference CEOs in the context of financial reporting — directly
+  relevant to the paper's self-presentation discrepancy construct.
+
+Dropped:
+
+- `ETFs` — fund selection discussion, not individual company CEOs
+- `financialindependence` — personal savings rate and retirement planning, very
+  little CEO discussion
+- `Bogleheads` — index fund philosophy ("buy VTI and chill"). The whole point is
+  to ignore company-level decisions. No CEO discussion.
+- `realestateinvesting` — real estate investors discussing rental properties,
+  not S&P 500 CEOs
+- `smallbusiness` — small business owners asking about payroll, LLCs, hiring.
+  Not S&P 500 CEO discussion.
+
+**Batch 3 — News + Tech + Work Culture:**
+
+Approved:
+
+- `news` — 29.5M subs, 89.8M comments. US and world current events. CEO mentions
+  in news headlines drive substantial discussion.
+- `worldnews` — 44.2M subs, 117.4M comments. Major global news. International
+  CEO coverage and corporate controversy.
+- `technology` — 18.0M subs, 31.4M comments. Tech news. CEO announcements,
+  product launches, and leadership decisions heavily discussed.
+- `tech` — 661K subs, 1.3M comments. More thoughtful tech discussion, CEO
+  strategy and industry impact.
+- `antiwork` — 2.9M subs, 23.8M comments. Employees voicing unfiltered opinions
+  about CEO behavior — purest form of crowd perception. "CEO gave himself $20M
+  bonus while cutting healthcare" is exactly the signal that differs from
+  earnings call self-presentation.
+- `WorkReform` — 749K subs, 2.1M comments. Similar to antiwork — employee
+  perspective on corporate leadership, labor policy, CEO decisions.
+- `cscareerquestions` — 2.2M subs, 6.4M comments. Tech workers discuss CEOs in
+  context of layoffs, return-to-office mandates, company culture, hiring
+  freezes. Signals from people inside or close to these companies.
+
+Dropped:
+
+- `sales` — sales reps discussing quotas, cold calling, CRM tools. ~1% of
+  comments touch CEOs (comp plan changes, leadership promises). Not worth the
+  processing cost for low signal. Can add later if CEO coverage is thin.
+- `marketing` — tactical discussions (email subject lines, CTR optimization).
+  CEO mentions are rare case studies, not sustained perception. Same low-signal
+  rationale as sales.
+- `boxoffice` — about weekend grosses and ticket numbers. Discusses movies and
+  studios, rarely individual CEOs. When Bob Iger or David Zaslav are mentioned,
+  it's in passing, not substantive leadership discussion.
+
+**Batch 4 — Major company subs (tech):**
+
+Approved (all S&P 500 confirmed):
+
+- `apple` — 6.1M subs, 12.4M comments
+- `google` — 3.4M subs, 893K comments
+- `teslamotors` — 3.4M subs, 5.8M comments
+- `microsoft` — 1.4M subs, 451K comments
+- `nvidia` — 2.1M subs, 5.1M comments
+- `Amd` — 2.2M subs, 7.5M comments
+- `intel` — 892K subs, 1.2M comments
+- `netflix` — 1.7M subs, 1.9M comments
+- `disney` — 2.3M subs, 705K comments
+- `amazon` — 235K subs, 361K comments
+
+**Batch 5 — Company subs (social media, retail, consumer):**
+
+Approved (all S&P 500 confirmed):
+
+- `facebook` — 362K subs, 800K comments
+- `Twitter` — 1.3M subs, 581K comments
+- `Nike` — 1.6M subs, 333K comments
+- `Costco` — 881K subs, 3.6M comments
+- `walmart` — 323K subs, 5.4M comments
+- `starbucks` — 301K subs, 3.8M comments
+- `Target` — 207K subs, 2.8M comments
+- `lululemon` — 842K subs, 2.2M comments
+- `Chipotle` — 121K subs, 1.2M comments
+- `Ebay` — 198K subs, 1.2M comments
+
+**Batch 6 — Company subs (transport, telecom, services):**
+
+Approved:
+
+- `uber` — 73.5K subs, 850K comments
+- `doordash` — 466K subs, 5.5M comments
+- `AirBnB` — 375K subs, 1.0M comments
+- `Ford` — 118K subs, 483K comments
+- `Rivian` — 116K subs, 979K comments
+- `boeing` — 45K subs, 293K comments
+- `verizon` — 117K subs, 1.3M comments
+- `tmobile` — 190K subs, 3.0M comments
+- `ATT` — 83K subs, 845K comments
+
+Dropped:
+
+- `Honda` — not S&P 500 (Japanese company)
+
+**Batch 7 — Company subs (tech/enterprise, retail, hospitality):**
+
+Approved (all S&P 500 confirmed):
+
+- `Dell` — 101K subs, 734K comments
+- `IBM` — 25K subs, 111K comments
+- `salesforce` — 87K subs, 390K comments
+- `Adobe` — 29K subs, 40K comments
+- `Cisco` — 94K subs, 258K comments
+- `Comcast` — 26K subs, 256K comments
+- `CoinBase` — 387K subs, 1.7M comments
+- `paypal` — 70K subs, 448K comments
+- `Hilton` — 51K subs, 200K comments
+- `marriott` — 98K subs, 411K comments
+
+**Batch 8 — Company subs (retail, logistics, misc):**
+
+Approved (all S&P 500 confirmed):
+
+- `CVS` — 69K subs, 970K comments
+- `kroger` — 51K subs, 619K comments
+- `FedEx` — 42K subs, 386K comments
+- `UPS` — 64K subs, 622K comments
+- `Schwab` — 58K subs, 165K comments
+- `Garmin` — 250K subs, 978K comments
+- `motorola` — 28K subs, 153K comments
+- `Ulta` — 108K subs, 462K comments
+- `AutoZone` — 6K subs, 70K comments
+- `carvana` — 28K subs, 141K comments
+
+**Batch 9 — Company subs (enterprise tech, specialty):**
+
+Approved (all S&P 500 confirmed):
+
+- `crowdstrike` — 35K subs, 61K comments
+- `palantir` — 31K subs, 41K comments
+- `accenture` — 28K subs, 100K comments
+- `servicenow` — 24K subs, 90K comments
+- `fortinet` — 57K subs, 277K comments
+- `dexcom` — 36K subs, 203K comments
+- `Cummins` — 21K subs, 84K comments
+- `HomeDepot` — 105K subs, 1.5M comments
+- `Lowes` — 65K subs, 972K comments
+- `unitedairlines` — 117K subs, 860K comments
+
+**Batch 10 — Low-volume company subs + investor subs:**
+
+Approved (low-priority, may yield minimal data):
+
+- `honeywell` — 1.3K subs, 1.3K comments
+- `caterpillar` — 3.4K subs, 5.3K comments
+- `Expedia` — 1.4K subs, 2.7K comments
+- `godaddy` — 3.2K subs, 10.5K comments
+- `Seagate` — 1.7K subs, 4.9K comments
+- `Autodesk` — 6.6K subs, 4.2K comments
+- `qualcomm` — 2.5K subs, 895 comments
+- `netapp` — 5.5K subs, 30K comments
+- `Arista` — 2.9K subs, 5.9K comments
+- `L3Harris` — 4.2K subs, 11K comments
+
+Approved (investor subs — higher value, discuss CEO decisions through investor
+lens):
+
+- `teslainvestorsclub` — 87K subs, 1.4M comments
+- `AMD_Stock` — 59K subs, 756K comments
+- `NVDA_Stock` — 82K subs, 215K comments
+- `PLTR` — 94K subs, 498K comments
+- `TSLA` — 38K subs, 116K comments
+- `AAPL` — 8.3K subs, 13K comments
+- `amzn` — 1.6K subs, 654 comments
+
+**Review complete.**
+
+**Review summary:**
+
+- Total approved: 81 subreddits
+- Total dropped: 11 subreddits (Daytrading, options, ETFs,
+  financialindependence, Bogleheads, realestateinvesting, smallbusiness, sales,
+  marketing, boxoffice, Honda)
+- Total comments across approved subs: 512M
+- Total posts across approved subs: 30.5M
+- All 81 approved subs confirmed present in DuckDB metadata (none missing)
+- Updated CSV: `data/discovery/candidate_subreddits.csv` (decision column
+  populated)
+
+**Next step:** Download approved subreddits from the per-subreddit data torrent.
+The torrent contains the top 40K subreddits — all 81 approved subs are
+well-known and will be included. Actual .zst file sizes will be known once the
+torrent client connects and lists files.
 
 ---
 
@@ -266,27 +538,23 @@ first.
 
 ## Checkpointing
 
-| Step   | Resume behavior                              |
-| ------ | -------------------------------------------- |
-| 0A, 0B | Re-run (minutes)                             |
-| 1A     | aria2c auto-resumes interrupted downloads    |
-| 1B     | Re-run (pip install, seconds)                |
-| 1C     | Re-run (DuckDB load, 10-20 min)             |
-| 1D     | Human decision, no crash risk                |
-| 2A     | Torrent client auto-resumes                  |
-| 3A     | Resume from last completed .zst file         |
-| 4A-4C  | Re-run against Parquet (fast DuckDB queries) |
+- **Step 0A, 0B:** Re-run (minutes)
+- **Step 1A:** aria2c auto-resumes interrupted downloads
+- **Step 1B:** Re-run (DuckDB native load, ~1.3 min)
+- **Step 1C:** Human decision, no crash risk
+- **Step 2A:** Torrent client auto-resumes
+- **Step 3A:** Resume from last completed .zst file
+- **Step 4A-4C:** Re-run against Parquet (fast DuckDB queries)
 
 ---
 
 ## Resource Usage
 
-| Resource           | Step 1 (discovery) | Step 2 (download) | Step 3 (filter) | Final output |
-| ------------------ | ------------------ | ----------------- | --------------- | ------------ |
-| Disk               | ~2.5GB             | 50-200GB temp     | < 500MB working | 2-10GB       |
-| RAM                | < 500MB            | Minimal           | < 500MB         | —            |
-| Time               | ~30 min            | Hours-days        | 1-4 hours       | —            |
-| Disk after cleanup | ~2.5GB (keep)      | —                 | —               | 2-10GB       |
+- **Step 1 (discovery):** ~2.5GB disk, <500MB RAM, ~5 min
+- **Step 2 (download):** 50-200GB temp disk, minimal RAM, hours to days
+- **Step 3 (filter):** <500MB working disk, <500MB RAM, 1-4 hours
+- **Final output:** 2-10GB disk (after cleanup)
+- **Disk after cleanup:** ~2.5GB (discovery) + 2-10GB (filtered) = ~5-13GB total
 
 ---
 
@@ -301,7 +569,10 @@ data/
 │   ├── subreddit_metadata_raw/
 │   │   └── reddit/subreddits/subreddits_2025-01.zst
 │   ├── subreddits.duckdb
-│   └── selected_subreddits.csv
+│   ├── snp1500.xls
+│   ├── CEO_Integrity_Dictionary.csv
+│   ├── CEO_Narcissism_Dictionary.csv
+│   └── candidate_subreddits.csv
 ├── raw/                              ← deleted after Step 3D
 │   ├── {subreddit}_comments.zst
 │   └── download_manifest.csv
