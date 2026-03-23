@@ -356,13 +356,18 @@ paper.
   filtered comments in hours. May struggle with Reddit slang since it was
   trained on formal financial text — validate against human-labeled sample.
 
-- **Level 5 — LLMs (LABELING ONLY, not bulk scoring):** Claude (via Claude Code
-  Max subscription, $200/month, already paid — no additional cost) following de
-  Kok (2025 Management Science) framework. Used ONLY to label a small sample of
+- **Level 5 — LLMs (LABELING ONLY, not bulk scoring):** Following de Kok (2025
+  Management Science) framework. Used ONLY to label a small sample of
   5,000-10,000 Reddit comments for: (a) Creating training data for a fine-tuned
   classifier (b) Validating FinBERT scores on Reddit text (c) Handling complex
-  cases FinBERT can't resolve (sarcasm, slang) NOT used on all 500M comments —
-  labeling sample only.
+  cases FinBERT can't resolve (sarcasm, slang). NOT used on all 500M comments —
+  labeling sample only. Two options for LLM access: (a) **Claude Code
+  interactive** — feed batches of comments into Claude Code (already available
+  via Max subscription at $200/month). Manual but no additional cost. Suitable
+  for smaller batches (hundreds to low thousands). (b) **Anthropic API
+  scripted** — automated Python script calling Claude API. Requires separate
+  Anthropic API key with pay-per-token credits. Cost ~$50-300 for 5-10K
+  comments. Faster and reproducible for larger labeling runs.
 
 - **Supplementary — LDA topic modeling:** Unsupervised topic discovery to
   understand what themes drive CEO perception (leadership, scandal, layoffs,
@@ -391,9 +396,10 @@ discrepancy.
 - Layer 1 filters 500M comments → 1-5M CEO-relevant (regex matching, free)
 - FinBERT scores 1-5M comments → hours on Colab GPU (free)
 - FinBERT scores 33K earnings call transcripts → minutes on Colab GPU (free)
-- Claude labels 5-10K sample → $0 additional (Claude Code Max already paid)
+- Claude labels 5-10K sample → $0 if done interactively via Claude Code, or
+  ~$50-300 via Anthropic API (separate from Claude Code Max subscription)
 - Dictionaries score all text → seconds (free)
-- Total additional cost: $0
+- Total additional cost: $0 (interactive labeling) or ~$50-300 (API labeling)
 
 **Recommended approach (for team review):**
 
