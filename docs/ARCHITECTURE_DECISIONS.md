@@ -234,23 +234,43 @@ The paper's self-presentation discrepancy requires scoring BOTH Reddit comments
 currently only have the Reddit pipeline. Transcripts are needed for Layer 2 when
 computing the discrepancy.
 
-Two sources identified in the paper:
+**Recommended source:** Hugging Face `Bose345/sp500_earnings_transcripts`
 
-- **WRDS S&P Global Transcripts** — 9,400+ companies from 2000, speaker-tagged.
-  Requires WRDS access (same subscription as ExecuComp, already confirmed).
-- **Hugging Face `Bose345/sp500_earnings_transcripts`** — 33,362 transcripts,
-  685 S&P 500 companies, 2005-2025, speaker-segmented, MIT license. Free.
+- 33,362 transcripts, 685 S&P 500 companies, 2005-2025
+- Speaker-segmented via `structured_content` field — array of `{speaker, text}`
+  objects. CEO speech can be isolated by matching speaker name/role.
+- 1.82GB single Parquet file, MIT license, free
+- Coverage: 67 transcripts in 2005, ramps to 2,000+/year from 2015 onward
+- Fields: symbol, company_name, company_id (Capital IQ), year, quarter, date,
+  content (raw text), structured_content (speaker-segmented)
+- company_id and symbol fields provide linkage to ExecuComp/CRSP
 
-**When needed:** After Layer 1 is complete and Layer 2 scoring begins. The
-transcripts feed the CEO self-presentation scores, which are then compared
-against Reddit crowd perception scores to compute the discrepancy.
+**Alternative source:** WRDS S&P Global Transcripts — 9,400+ companies from
+2000, speaker-tagged. Requires WRDS access (already confirmed). More
+comprehensive but not free. Use if Hugging Face dataset has gaps.
+
+**How to acquire:**
+
+```bash
+source .venv/bin/activate
+pip install datasets
+python3 -c "
+from datasets import load_dataset
+ds = load_dataset('Bose345/sp500_earnings_transcripts', split='train')
+ds.to_parquet('data/reference/earnings_transcripts.parquet')
+"
+```
+
+- Output: `data/reference/earnings_transcripts.parquet` (~1.82GB)
+- When needed: after Layer 1 is complete, before Layer 2 scoring begins
 
 **Loughran-McDonald dictionaries (overconfidence baseline):**
 
-- Not yet downloaded. Available free from
-  https://sraf.nd.edu/loughranmcdonald-master-dictionary/
+- Not yet downloaded
+- Available free from https://sraf.nd.edu/loughranmcdonald-master-dictionary/
 - Needed for Layer 2 Pass 1 overconfidence scoring
 - Contains positive/negative word lists designed for financial text
+- Download the master dictionary CSV and place in `data/reference/`
 
 ---
 
