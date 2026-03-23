@@ -274,9 +274,97 @@ ds.to_parquet('data/reference/earnings_transcripts.parquet')
 
 ---
 
+## Decision 5: NLP Scoring Method for Layer 2 — OPEN
+
+**Question:** What NLP method(s) do we use to score Reddit comments and earnings
+call text on overconfidence, integrity, and narcissism?
+
+**Why this matters:** The method choice determines whether the paper passes peer
+review. Dictionary-based methods alone are increasingly insufficient for
+top-tier accounting/finance journals.
+
+**Evidence from our elite journal reading list:**
+
+- **Merkley et al. (2024, Review of Accounting Studies)** — used CryptoBERT,
+  FinBERT, and Twitter-RoBERTa (3 transformer models) for sentiment on social
+  media text. Did NOT use dictionaries as primary method. Even they noted
+  transformers "struggle with crypto colloquialisms, idioms, sarcasm,
+  expletives, and abbreviations."
+- **Bogachek et al. (2025, Review of Accounting Studies)** — used LDA topic
+  modeling + XGBoost for prediction. Machine learning, not dictionaries.
+  Positioned against "keyword searches within narrow portions" as a limitation
+  of prior work.
+- **Mai et al. (2018, JMIS)** — used Loughran-McDonald dictionary for bitcoin
+  sentiment. Our own review flagged this as a weakness: "Loughran-McDonald
+  dictionary designed for SEC filings, not informal crypto social media —
+  misclassification rates likely substantial but never assessed or validated
+  against human coders."
+
+**Evidence from broader literature (web research):**
+
+- **Huang et al. (2023, Contemporary Accounting Research)** — FinBERT
+  "substantially outperforms" Loughran-McDonald AND other ML methods (naive
+  Bayes, SVM, CNN, LSTM) for financial sentiment. Current gold standard.
+- **Li et al. (2021, Review of Financial Studies)** — rejected dictionaries for
+  measuring corporate culture because "subtle and nuanced" language escapes even
+  diligent human dictionary construction. Used word2vec instead.
+- **de Kok (2025, Management Science)** — published framework for using LLMs
+  (ChatGPT/GPT-4) in accounting research. LLMs can solve "any textual analysis
+  task solvable using non-generative methods" plus tasks previously requiring
+  human coding.
+- **Bochkay et al. (2023, CAR)** — survey paper representing field consensus:
+  dictionaries are bag-of-words (ignore context, negation, word order),
+  transformers use attention to capture how words are used in context. The field
+  is explicitly moving from dictionaries to contextual models.
+
+**The problem with dictionaries for our use case:**
+
+- "This CEO is NOT honest" scores positive on integrity (dictionary sees
+  "honest")
+- "dude is shady af" expresses low integrity but matches zero dictionary words
+- "cooking the books" — no dictionary captures this
+- Reddit slang, sarcasm, and informal language systematically evade
+  dictionary-based detection
+- Loughran-McDonald was designed for 10-K filings, not Reddit posts
+
+**Proposed multi-method approach (for team review):**
+
+- **Primary: FinBERT** — current gold standard per Huang et al. (2023 CAR).
+  Fine-tuned on financial text, handles negation and context. Runs on Colab GPU.
+  May struggle with Reddit slang — validate against human-labeled sample.
+- **Secondary: LLM-based classification** — following de Kok (2025 Management
+  Science) framework. Use Claude/GPT-4 to label a sample of 5,000-10,000 Reddit
+  comments on overconfidence/integrity. This becomes training data for a
+  fine-tuned classifier, OR used directly if sample is small enough.
+- **Baseline/robustness: Dictionary methods** — Loughran-McDonald
+  (overconfidence), Hennig (integrity), narcissism dictionary. Keep as
+  robustness checks. If FinBERT and dictionaries agree directionally, this
+  strengthens validity. Reviewers expect to see this comparison. Do NOT rely on
+  dictionaries alone.
+- **Exploratory: LDA topic modeling** — identify what themes drive CEO
+  perception across subreddits (leadership, scandal, layoffs, innovation).
+  Supplementary analysis, not core scoring.
+
+**The defensible story for reviewers:** "We use FinBERT (Huang et al. 2023 CAR)
+as our primary scoring method, validated against dictionary baselines
+(Loughran-McDonald; Hennig et al. 2025), with LLM-based classification
+(following de Kok 2025 Management Science) for complex trait disambiguation.
+This multi-method approach follows current best practices in textual analysis
+for accounting research (Bochkay et al. 2023 CAR)."
+
+**Still to decide:**
+
+- Which LLM for labeling (Claude vs GPT-4 vs open-source)?
+- Fine-tune a classifier on LLM labels, or use LLM directly?
+- Colab session management and batch sizing for FinBERT inference
+- How to validate FinBERT on Reddit text (human labeling sample size)
+
+---
+
 ## Decisions Queue
 
-- **Decision 5:** Layer 2 processing — Colab session management, batch sizing,
-  checkpointing for FinBERT GPU scoring
-- **Decision 6:** Additional trait dimensions — which ones, what dictionaries,
-  priority order
+- **Decision 6:** Layer 2 processing logistics — Colab session management, batch
+  sizing, checkpointing for GPU scoring
+- **Decision 7:** Additional trait dimensions — narcissism dictionary is small
+  (13 words), likely need transformer-based approach instead. Priority order for
+  scoring passes.
