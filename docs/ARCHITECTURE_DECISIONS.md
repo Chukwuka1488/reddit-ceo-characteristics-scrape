@@ -327,37 +327,78 @@ top-tier accounting/finance journals.
   dictionary-based detection
 - Loughran-McDonald was designed for 10-K filings, not Reddit posts
 
-**Proposed multi-method approach (for team review):**
+**Method hierarchy (from simplest to most capable):**
 
-- **Primary: FinBERT** — current gold standard per Huang et al. (2023 CAR).
-  Fine-tuned on financial text, handles negation and context. Runs on Colab GPU.
-  May struggle with Reddit slang — validate against human-labeled sample.
-- **Secondary: LLM-based classification** — following de Kok (2025 Management
-  Science) framework. Use Claude/GPT-4 to label a sample of 5,000-10,000 Reddit
-  comments on overconfidence/integrity. This becomes training data for a
-  fine-tuned classifier, OR used directly if sample is small enough.
-- **Baseline/robustness: Dictionary methods** — Loughran-McDonald
-  (overconfidence), Hennig (integrity), narcissism dictionary. Keep as
-  robustness checks. If FinBERT and dictionaries agree directionally, this
-  strengthens validity. Reviewers expect to see this comparison. Do NOT rely on
-  dictionaries alone.
-- **Exploratory: LDA topic modeling** — identify what themes drive CEO
-  perception across subreddits (leadership, scandal, layoffs, innovation).
-  Supplementary analysis, not core scoring.
+Each level builds on the one below. We use multiple levels for construct
+validity — if simpler and more complex methods agree, that strengthens the
+paper.
+
+- **Level 1 — Dictionaries (baseline/robustness):** Loughran-McDonald
+  (overconfidence), Hennig (integrity), narcissism dictionary. Count word
+  occurrences. Fast, free, reproducible. Misses context, negation, slang. Used
+  ONLY as a robustness check — reviewers expect to see dictionary baselines
+  alongside modern methods, but will reject dictionaries as the sole method.
+
+- **Level 2 — Traditional ML (SVM, Random Forest, XGBoost on TF-IDF):**
+  Feature-based classifiers. Still published in top journals — Bogachek et al.
+  (2025 RAST) used XGBoost. More capable than dictionaries because they learn
+  feature combinations. Could serve as an intermediate method if FinBERT is too
+  expensive to validate. Requires labeled training data.
+
+- **Level 3 — Deep Learning (LSTM, CNN):** Neural networks on word embeddings.
+  Superseded by transformers — Huang et al. (2023 CAR) showed FinBERT
+  outperforms CNN and LSTM on financial text. NOT worth implementing separately
+  since FinBERT (Level 4) exists and beats them.
+
+- **Level 4 — FinBERT (PRIMARY METHOD):** Transformer pre-trained on financial
+  text. Current gold standard per Huang et al. (2023 CAR). Handles negation,
+  context, domain-specific vocabulary. Runs on Colab GPU (free). Processes 1-5M
+  filtered comments in hours. May struggle with Reddit slang since it was
+  trained on formal financial text — validate against human-labeled sample.
+
+- **Level 5 — LLMs (LABELING ONLY, not bulk scoring):** Claude/GPT-4 following
+  de Kok (2025 Management Science) framework. Used ONLY to label a small sample
+  of 5,000-10,000 Reddit comments for: (a) Creating training data for a
+  fine-tuned classifier (b) Validating FinBERT scores on Reddit text (c)
+  Handling complex cases FinBERT can't resolve (sarcasm, slang) Cost: ~$50-300
+  for 5-10K samples. NOT used on all 500M comments (~$5-15M would be
+  prohibitive).
+
+- **Supplementary — LDA topic modeling:** Unsupervised topic discovery to
+  understand what themes drive CEO perception (leadership, scandal, layoffs,
+  innovation). Descriptive/exploratory, not for trait scoring.
+
+**Processing cost reality:**
+
+- Layer 1 filters 500M comments → 1-5M CEO-relevant (regex matching, free)
+- FinBERT scores 1-5M comments → hours on Colab GPU (free)
+- LLM labels 5-10K sample → $50-300 (one-time)
+- Dictionaries score 1-5M comments → seconds (free)
+- We are NOT running LLMs on 500M or even 1-5M comments
+
+**Proposed approach for the paper (for team review):**
+
+- **Primary scoring: FinBERT** on all 1-5M filtered comments (Colab GPU, free)
+- **Validation: LLM labeling** of 5-10K sample to verify FinBERT accuracy on
+  Reddit text ($50-300)
+- **Robustness: Dictionary baselines** to show directional agreement
+- **Optional: Traditional ML (XGBoost)** trained on LLM-labeled data as an
+  alternative classifier for comparison
+- **Exploratory: LDA** for thematic analysis of CEO discussion topics
 
 **The defensible story for reviewers:** "We use FinBERT (Huang et al. 2023 CAR)
 as our primary scoring method, validated against dictionary baselines
-(Loughran-McDonald; Hennig et al. 2025), with LLM-based classification
-(following de Kok 2025 Management Science) for complex trait disambiguation.
-This multi-method approach follows current best practices in textual analysis
-for accounting research (Bochkay et al. 2023 CAR)."
+(Loughran-McDonald; Hennig et al. 2025) and LLM-labeled ground truth (following
+de Kok 2025 Management Science). This multi-method approach follows current best
+practices in textual analysis for accounting research (Bochkay et al. 2023
+CAR)."
 
 **Still to decide:**
 
 - Which LLM for labeling (Claude vs GPT-4 vs open-source)?
-- Fine-tune a classifier on LLM labels, or use LLM directly?
+- Fine-tune a classifier on LLM labels, or use LLM only for validation?
 - Colab session management and batch sizing for FinBERT inference
-- How to validate FinBERT on Reddit text (human labeling sample size)
+- Human labeling sample size for inter-rater reliability with LLM/FinBERT
 
 ---
 
