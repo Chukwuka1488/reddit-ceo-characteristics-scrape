@@ -1,5 +1,26 @@
 # Architecture Decisions: Reddit CEO Characteristics Pipeline
 
+## How This Document Was Built
+
+This architecture was developed through an iterative question-and-answer process
+between the research team and a principal data engineer. Each decision was
+arrived at by:
+
+1. Identifying the question and why it matters
+2. Laying out the options with tradeoffs
+3. Raising feasibility concerns based on our hardware constraints (32GB RAM, 2TB
+   disk, zero budget)
+4. Deciding based on what's defensible for an accounting journal publication
+5. Documenting the reasoning so future contributors understand not just what was
+   decided, but why
+
+The research paper driving all decisions is: "CEO Self-Presentation Discrepancy
+and Earnings Quality" — which measures the gap between how CEOs present
+themselves in earnings calls vs. how Reddit communities perceive them. Every
+pipeline decision serves this construct.
+
+---
+
 ## Constraints
 
 - **RAM:** 32GB
@@ -13,57 +34,132 @@
 
 ## Stack
 
-- **DuckDB** — out-of-core analytical queries, handles data exceeding RAM
-- **Polars** — lazy/streaming DataFrames
-- **python-zstandard** — stream-decompress .zst without loading into memory
-- **Parquet (zstd)** — storage format, 5-10x smaller than raw JSON
-- **FinBERT** — trait scoring (Layer 2, runs on Colab GPU)
-- **Trait dictionaries** — word lists for dictionary-based scoring (Layer 2)
+- **DuckDB** — out-of-core analytical queries, handles data exceeding RAM.
+  Chosen because it runs in-process (no server), reads zstd NDJSON natively, and
+  processed 22M rows in 1.3 minutes on our hardware. Research showed it's
+  10-100x faster than Spark on single-machine workloads (DataTalks DE Zoomcamp
+  uses it alongside dbt for local analytics).
+- **Polars** — lazy/streaming DataFrames for any processing DuckDB can't do
+  natively.
+- **python-zstandard** — stream-decompress .zst without loading into memory.
+  Required for the Step 3 filtering pipeline where we process line by line.
+- **Parquet (zstd)** — storage format, 5-10x smaller than raw JSON. Standard for
+  analytical workloads. DuckDB reads it with predicate pushdown and column
+  pruning.
+- **FinBERT** — transformer model fine-tuned on financial text, for trait
+  scoring in Layer 2. Runs on Colab GPU, not local.
+- **Trait dictionaries** — word lists for dictionary-based scoring as baselines
+  alongside FinBERT.
+
+**Stack research:** We investigated the DataTalks.club Data Engineering Zoomcamp
+(free, open-source focused), Arctic Shift/Pushshift processing projects, and
+single-machine TB-scale processing patterns. Key finding: DuckDB's native
+`read_json` eliminates the need for Python-level JSON parsing entirely. Our
+initial Python line-by-line approach ran at 160 rows/sec; DuckDB native ran at
+284,695 rows/sec — a 175x improvement.
 
 ---
 
 ## Decision 1: Data Acquisition Strategy — DECIDED
 
-Three-pass approach:
+**Question:** How do we get Reddit data onto our machine without downloading the
+full 3.7TB dump?
 
-- Metadata catalog: download subreddit metadata torrent (22M subs), load into
+**Options considered:**
+
+- **Full monthly dump (3.7TB):** Ruled out immediately — doesn't fit on 2TB
+  disk. Even if it did, we'd stream through every month's file to find
+  CEO-relevant comments — massive wasted I/O.
+- **Per-subreddit torrent (selective download):** Top 40K subreddits, each as
+  its own .zst file. Download only what we need. Total is 3.7TB but individual
+  subs range from MBs to ~15GB.
+- **Arctic Shift API:** Query by subreddit + keyword + date range. Minimal
+  storage but dependent on external service, rate-limited, may time out on large
+  subs.
+
+**Process:** We first considered jumping straight to downloading specific
+subreddits, but realized we needed a discovery phase — we can't pick subreddits
+without knowing what's available and what contains CEO signal. This led to the
+three-pass approach.
+
+**Decision:** Three-pass approach:
+
+- Pass 1: Download subreddit metadata torrent (2.65GB, 22M subs), load into
   DuckDB, query and filter for relevance
-- Subreddit selection: 81 subreddits approved through iterative human review
-  across 10 batches (documented in LAYER1_PIPELINE.md)
-- Selective download: torrent only approved subreddits from the per-subreddit
-  data torrent
-
-Monthly dump (3.7TB) ruled out — doesn't fit on disk, wasteful.
+- Pass 2: Iterative human review — 5 SQL queries progressively narrowing 22M
+  subreddits to 81 approved candidates across 10 review batches
+- Pass 3: Selective torrent download of only approved subreddits
 
 ---
 
 ## Decision 2: CEO Universe Dataset — DECIDED
 
-- **Source:** ExecuComp via WRDS (`data/discovery/snp1500.xls`)
-- **Data available:** S&P 1500 companies, 2010-2025, 31,281 rows, 107 columns
+**Question:** Where do we get a defensible list of S&P 500 CEOs across 20 years?
+
+**Why this matters:** This list gates the entire pipeline. If the CEO names are
+wrong, our Reddit filtering matches the wrong people, our subreddit selection is
+wrong, and the paper's methodology is indefensible in peer review.
+
+**Options considered:**
+
+- **ExecuComp (WRDS):** Gold standard for accounting publications. Peer
+  reviewers expect it. Requires university subscription.
+- **SEC EDGAR (DEF 14A):** Free, defensible provenance. But parsing 20 years of
+  proxy statements is its own data engineering project.
+- **Wikipedia + validation:** Quick starting point but not citable as primary
+  academic source.
+- **Open datasets (Kaggle/GitHub):** Free but provenance varies, may lack CEO
+  mapping.
+
+**Decision:** ExecuComp via WRDS (university access confirmed).
+
+- **Data available:** `data/discovery/snp1500.xls` — S&P 1500 companies,
+  2010-2025, 31,281 rows, 107 columns
 - **S&P 500 subset:** 499 unique companies, 3,276 CEO rows (`spcode = 'SP'`)
 - **Key fields:** ticker, coname, exec_fullname, exec_fname, exec_lname,
   becameceo, pceo, year, spcode
-- **Separate deliverable:** yes — build and validate before feeding into Reddit
-  pipeline
+- **Separate deliverable:** yes — build and validate the CEO panel dataset
+  independently before feeding into the Reddit pipeline, because errors here
+  cascade into everything downstream
 - **Name variants:** full names + "CEO" + company name combos for Reddit
-  matching
+  matching (Option C from the original question — broadest recall, most API
+  calls, but catches the most references)
 
 ---
 
 ## Decision 3: Pipeline Architecture — DECIDED (two-layer)
 
-- **Layer 1 (local):** Collect all CEO-relevant Reddit comments 2005-2025.
-  Trait-agnostic. Full text stored. Runs once.
-- **Layer 2 (Colab GPU):** Scoring passes over Layer 1 output. Each pass applies
-  a different scoring method. Repeatable without re-downloading Reddit data.
+**Question:** Should we extract and score in one pass, or separate collection
+from scoring?
+
+**Why this matters:** The research scope expanded beyond the paper's original
+two traits (overconfidence + integrity) to include additional dimensions like
+narcissism. If we couple extraction with scoring, adding a new trait means
+reprocessing all Reddit data.
+
+**Decision:** Two-layer design:
+
+- **Layer 1 (local machine):** Collect ALL CEO-relevant Reddit comments
+  2005-2025. Trait-agnostic — store full text with metadata. Runs once and is
+  never repeated. The expensive work (downloading, decompressing, filtering) is
+  done once.
+- **Layer 2 (Colab GPU):** Independent scoring passes over Layer 1 Parquet
+  output. Each pass applies a different scoring method and writes scored output.
+  Adding a new trait is a new scoring pass over existing data, not a new crawl.
+
+**Why two layers:** We never reprocess Reddit data. Adding narcissism scoring
+later is just a new Python script reading existing Parquet files. The 2005-2012
+Reddit data is sparse (Reddit business discussion was minimal before ~2010) but
+we still collect it for completeness.
 
 ---
 
 ## Trait Scoring Dictionaries
 
 Reference word lists for Layer 2 dictionary-based scoring. These serve as
-baselines alongside FinBERT model-based scoring.
+baselines alongside FinBERT model-based scoring. If FinBERT and dictionary
+methods agree directionally on a CEO's trait score, this strengthens construct
+validity.
 
 **CEO Integrity Dictionary (`data/discovery/CEO_Integrity_Dictionary.csv`)**
 
@@ -71,10 +167,9 @@ baselines alongside FinBERT model-based scoring.
   M&A decision-making", Strategic Management Journal
 - **Contents:** 140 words categorized by integrity dimension (e.g.,
   Positive_Trust: "accountable", "candid", "forthright")
-- **Use in pipeline:** Layer 2 scoring pass for integrity trait. Count
-  dictionary word occurrences in Reddit comments to produce a dictionary-based
-  integrity score per comment. Used as baseline/robustness check against FinBERT
-  integrity scores.
+- **Use in pipeline:** Layer 2 Pass 1. Count dictionary word occurrences in
+  Reddit comments to produce a dictionary-based integrity score per comment.
+  Used as baseline/robustness check against FinBERT integrity scores.
 - **Paper reference:** "CEO integrity is measured using the Hennig et al. (2025)
   226-word integrity dictionary" — the full 226-word version may include
   inflected forms; our 140-row file contains root words.
@@ -85,10 +180,9 @@ baselines alongside FinBERT model-based scoring.
   on narcissism-related terms
 - **Contents:** 13 words (arrogance, arrogant, boast, boastful, etc.) with word
   count statistics, sentiment flags, and complexity measures
-- **Use in pipeline:** Layer 2 scoring pass for narcissism trait — an additional
-  dimension beyond the paper's original two traits (overconfidence + integrity).
-  Narcissism was identified as relevant because Ham et al. (2017) found "CFO
-  narcissism is a better predictor of financial reporting quality than CEO
+- **Use in pipeline:** Layer 2 Pass 2 (extension beyond the paper's original
+  scope). Narcissism was identified as relevant because Ham et al. (2017) found
+  "CFO narcissism is a better predictor of financial reporting quality than CEO
   narcissism."
 - **Note:** Small dictionary (13 words). May need expansion or supplementation
   with a more comprehensive narcissism word list for robust scoring.
@@ -101,14 +195,19 @@ baselines alongside FinBERT model-based scoring.
   Integrity (FinBERT + Hennig dictionary)
 - **Pass 2 (extension):** Narcissism (FinBERT + narcissism dictionary)
 - **Future passes:** Additional traits as dictionaries/models are identified
-- Dictionary scores serve as baselines — if FinBERT and dictionary methods agree
-  directionally, this strengthens construct validity
 
 ---
 
 ## Decision 4: Temporal Alignment and Extraction Strategy — DECIDED
 
-Principle: **collect broadly, filter narrowly at analysis time.**
+**Question:** How do we align Reddit comments to earnings call timing? And
+should we filter during extraction or at analysis time?
+
+**Why this matters:** The paper requires Reddit text from the 90-day window
+before each earnings announcement. If we bake this window into extraction, we
+can't change it without reprocessing everything.
+
+**Principle decided:** Collect broadly, filter narrowly at analysis time.
 
 - **Decoupled extraction (Q4.1):** Yes. Layer 1 stores ALL CEO-relevant comments
   with timestamps. Windowing to 90-day pre-earnings windows happens at analysis
@@ -126,9 +225,38 @@ Principle: **collect broadly, filter narrowly at analysis time.**
 
 ---
 
+## Data Sources Not Yet Acquired
+
+**Earnings call transcripts (CEO self-presentation side):**
+
+The paper's self-presentation discrepancy requires scoring BOTH Reddit comments
+(crowd perception) AND earnings call transcripts (CEO self-presentation). We
+currently only have the Reddit pipeline. Transcripts are needed for Layer 2 when
+computing the discrepancy.
+
+Two sources identified in the paper:
+
+- **WRDS S&P Global Transcripts** — 9,400+ companies from 2000, speaker-tagged.
+  Requires WRDS access (same subscription as ExecuComp, already confirmed).
+- **Hugging Face `Bose345/sp500_earnings_transcripts`** — 33,362 transcripts,
+  685 S&P 500 companies, 2005-2025, speaker-segmented, MIT license. Free.
+
+**When needed:** After Layer 1 is complete and Layer 2 scoring begins. The
+transcripts feed the CEO self-presentation scores, which are then compared
+against Reddit crowd perception scores to compute the discrepancy.
+
+**Loughran-McDonald dictionaries (overconfidence baseline):**
+
+- Not yet downloaded. Available free from
+  https://sraf.nd.edu/loughranmcdonald-master-dictionary/
+- Needed for Layer 2 Pass 1 overconfidence scoring
+- Contains positive/negative word lists designed for financial text
+
+---
+
 ## Decisions Queue
 
 - **Decision 5:** Layer 2 processing — Colab session management, batch sizing,
-  checkpointing for GPU scoring
+  checkpointing for FinBERT GPU scoring
 - **Decision 6:** Additional trait dimensions — which ones, what dictionaries,
   priority order
