@@ -356,49 +356,82 @@ paper.
   filtered comments in hours. May struggle with Reddit slang since it was
   trained on formal financial text — validate against human-labeled sample.
 
-- **Level 5 — LLMs (LABELING ONLY, not bulk scoring):** Claude/GPT-4 following
-  de Kok (2025 Management Science) framework. Used ONLY to label a small sample
-  of 5,000-10,000 Reddit comments for: (a) Creating training data for a
-  fine-tuned classifier (b) Validating FinBERT scores on Reddit text (c)
-  Handling complex cases FinBERT can't resolve (sarcasm, slang) Cost: ~$50-300
-  for 5-10K samples. NOT used on all 500M comments (~$5-15M would be
-  prohibitive).
+- **Level 5 — LLMs (LABELING ONLY, not bulk scoring):** Claude (via Claude Code
+  Max subscription, $200/month, already paid — no additional cost) following de
+  Kok (2025 Management Science) framework. Used ONLY to label a small sample of
+  5,000-10,000 Reddit comments for: (a) Creating training data for a fine-tuned
+  classifier (b) Validating FinBERT scores on Reddit text (c) Handling complex
+  cases FinBERT can't resolve (sarcasm, slang) NOT used on all 500M comments —
+  labeling sample only.
 
 - **Supplementary — LDA topic modeling:** Unsupervised topic discovery to
   understand what themes drive CEO perception (leadership, scandal, layoffs,
   innovation). Descriptive/exploratory, not for trait scoring.
 
+**The construct equivalence problem:**
+
+We score two radically different text genres on the same traits:
+
+- Earnings call: "We remain confident in our strategic positioning" (formal)
+- Reddit: "lol this dude is delusional, company is tanking" (informal)
+
+Both express overconfidence — one self-presented, one crowd-perceived. The
+method must produce comparable scores across genres. FinBERT was trained on
+financial text (SEC filings, analyst reports) — excellent for earnings calls,
+uncertain for Reddit slang.
+
+**Solution:** Use FinBERT on both sources, but validate on Reddit. If FinBERT
+accuracy on Reddit < 70% against LLM/human labels, fine-tune a general RoBERTa
+model (trained on web text including Reddit) on the LLM-labeled data.
+Standardize scores within each source (z-scores) before computing the
+discrepancy.
+
 **Processing cost reality:**
 
 - Layer 1 filters 500M comments → 1-5M CEO-relevant (regex matching, free)
 - FinBERT scores 1-5M comments → hours on Colab GPU (free)
-- LLM labels 5-10K sample → $50-300 (one-time)
-- Dictionaries score 1-5M comments → seconds (free)
-- We are NOT running LLMs on 500M or even 1-5M comments
+- FinBERT scores 33K earnings call transcripts → minutes on Colab GPU (free)
+- Claude labels 5-10K sample → $0 additional (Claude Code Max already paid)
+- Dictionaries score all text → seconds (free)
+- Total additional cost: $0
 
-**Proposed approach for the paper (for team review):**
+**Recommended approach (for team review):**
 
-- **Primary scoring: FinBERT** on all 1-5M filtered comments (Colab GPU, free)
-- **Validation: LLM labeling** of 5-10K sample to verify FinBERT accuracy on
-  Reddit text ($50-300)
-- **Robustness: Dictionary baselines** to show directional agreement
-- **Optional: Traditional ML (XGBoost)** trained on LLM-labeled data as an
-  alternative classifier for comparison
-- **Exploratory: LDA** for thematic analysis of CEO discussion topics
+- **Earnings calls: FinBERT** — trained on financial text, this is its home
+  turf. Primary scoring method.
+- **Reddit: FinBERT first, validate, fallback to fine-tuned RoBERTa**
+  - Run FinBERT on all 1-5M filtered Reddit comments (Colab GPU, free)
+  - Use Claude (Code Max) to label 5-10K Reddit comments as ground truth
+  - If FinBERT accuracy on Reddit > 70%: keep FinBERT scores
+  - If FinBERT accuracy on Reddit < 70%: fine-tune RoBERTa on the Claude-labeled
+    data, re-score all Reddit comments
+- **Construct equivalence:** Standardize scores within each source (z-scores)
+  before computing discrepancy. Validate by checking that score distributions
+  respond to known events (CEO scandals, major announcements).
+- **Robustness: Dictionary baselines** on both sources to show directional
+  agreement. Reviewers expect this comparison.
+- **Optional: XGBoost** trained on Claude-labeled data combining FinBERT scores
+  - non-text features (comment score, subreddit, comment length) for a richer
+    prediction model.
+- **Exploratory: LDA** for thematic analysis of CEO discussion topics.
 
 **The defensible story for reviewers:** "We use FinBERT (Huang et al. 2023 CAR)
-as our primary scoring method, validated against dictionary baselines
-(Loughran-McDonald; Hennig et al. 2025) and LLM-labeled ground truth (following
-de Kok 2025 Management Science). This multi-method approach follows current best
-practices in textual analysis for accounting research (Bochkay et al. 2023
-CAR)."
+as our primary scoring method for both earnings calls and Reddit text, validated
+against Claude-labeled ground truth (following de Kok 2025 Management Science)
+and dictionary baselines (Loughran-McDonald; Hennig et al. 2025). For Reddit
+text, we validate FinBERT accuracy against LLM labels and fall back to a
+fine-tuned RoBERTa if accuracy is insufficient. Scores are standardized within
+each source before computing the self-presentation discrepancy. This
+multi-method approach follows current best practices in textual analysis for
+accounting research (Bochkay et al. 2023 CAR)."
 
 **Still to decide:**
 
-- Which LLM for labeling (Claude vs GPT-4 vs open-source)?
-- Fine-tune a classifier on LLM labels, or use LLM only for validation?
+- Fine-tune RoBERTa on Claude labels, or use FinBERT if validation passes?
+  (Depends on FinBERT accuracy on Reddit — empirical question)
 - Colab session management and batch sizing for FinBERT inference
-- Human labeling sample size for inter-rater reliability with LLM/FinBERT
+- Human labeling sample size for inter-rater reliability with Claude/FinBERT
+- Claude labeling: batch via API script or interactive via Claude Code?
 
 ---
 
