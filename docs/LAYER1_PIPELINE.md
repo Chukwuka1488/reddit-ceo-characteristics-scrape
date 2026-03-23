@@ -502,20 +502,39 @@ When resuming this project, pick up from here in order:
 
 ---
 
-## Step 2: Data Download
+## Step 2: Data Download (IN PROGRESS)
 
-**2A — Selective Torrent Download**
+**2A — Get torrent metadata**
 
-- Torrent client downloads only selected subreddit .zst files from the
-  per-subreddit data torrent.
-- Output: `data/raw/{subreddit}_comments.zst`,
-  `data/raw/{subreddit}_submissions.zst`
-- Storage: 50-200GB (temporary)
-- Time: hours to days
+- Fetched .torrent file for per-subreddit dataset using
+  `aria2c --bt-metadata-only=true --bt-save-metadata=true`
+- Torrent hash: `3e3f64dee22dc304cdd2546254ca1f8e8ae542b4`
+- Full torrent: 3,693 GB (3.7TB), ~80K files across 40K subreddits
+- Used `aria2c --show-files` on the .torrent file to get actual file sizes for
+  our 81 approved subreddits
 
-**2B — Download Verification**
+**2B — Actual download sizes (from torrent metadata)**
 
-- Verify checksums, log sizes, confirm completeness.
+- **Total: 72.35 GB** for 81 subreddits (162 files: comments + submissions)
+- Much smaller than the 157GB estimate — the 300-byte-per-comment guess was
+  wrong. Real data is more compressed.
+- Top 5 by size: worldnews (16.2GB), news (12.0GB), wallstreetbets (8.5GB),
+  technology (4.9GB), superstonk (3.8GB)
+- Smallest subs are under 20MB (palantir, crowdstrike, adobe)
+- All 81 approved subs confirmed present in the torrent (none missing)
+
+**2C — Selective Torrent Download**
+
+- Using `aria2c --select-file=` with the 162 file indices for our 81 subs
+- Parallel download — torrent protocol handles this efficiently from the same
+  swarm
+- Output: `data/raw/reddit/subreddits25/{subreddit}_comments.zst`,
+  `data/raw/reddit/subreddits25/{subreddit}_submissions.zst`
+- Storage: 72.35GB (temporary — deleted after Step 3)
+
+**2D — Download Verification**
+
+- Verify all 162 files downloaded, check sizes match torrent metadata
 - Output: `data/raw/download_manifest.csv`
 
 ---
@@ -592,7 +611,7 @@ first.
 ## Resource Usage
 
 - **Step 1 (discovery):** ~2.5GB disk, <500MB RAM, ~5 min
-- **Step 2 (download):** 50-200GB temp disk, minimal RAM, hours to days
+- **Step 2 (download):** 72.35GB temp disk, minimal RAM, hours to days
 - **Step 3 (filter):** <500MB working disk, <500MB RAM, 1-4 hours
 - **Final output:** 2-10GB disk (after cleanup)
 - **Disk after cleanup:** ~2.5GB (discovery) + 2-10GB (filtered) = ~5-13GB total
