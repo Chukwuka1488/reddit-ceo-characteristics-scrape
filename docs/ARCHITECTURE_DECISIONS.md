@@ -152,6 +152,35 @@ later is just a new Python script reading existing Parquet files. The 2005-2012
 Reddit data is sparse (Reddit business discussion was minimal before ~2010) but
 we still collect it for completeness.
 
+**Data flow between layers:**
+
+- Layer 1 runs locally (72GB raw .zst → 2-8GB filtered Parquet)
+- Filtered Parquet uploaded to Google Drive (free, 15GB tier is sufficient)
+- Layer 2 on Colab mounts Drive, copies filtered data to local Colab disk, runs
+  FinBERT scoring
+- If Drive I/O is too slow during scoring, upgrade to Google Cloud Storage
+  (~$1.50/month for 2-8GB). GCS also better for team collaboration — all
+  teammates can access the same bucket with IAM permissions.
+
+**Why raw 72GB stays local, not on Colab/cloud:**
+
+- Layer 1 (filtering) needs streaming decompression of .zst files — CPU-bound,
+  no GPU needed, runs fine on the local 32GB RAM machine
+- Uploading 72GB to cloud is slow, expensive, and unnecessary
+- Colab's 225GB temp disk could hold it but data disappears on session end —
+  you'd re-download every session
+- Only the filtered output (2-8GB) crosses the local-to-cloud boundary
+
+**Team access to raw data:**
+
+- Raw .zst files are NOT uploaded to cloud (too large, not needed by teammates
+  for Layer 2)
+- Teammates who need raw data can download directly from Academic Torrents using
+  the documented aria2c command with select-file indices (see LAYER1_PIPELINE.md
+  Step 2)
+- Reference files (ExecuComp, dictionaries, candidate list, earnings
+  transcripts) are in the GitHub repo or small enough to share via Drive
+
 ---
 
 ## Trait Scoring Dictionaries
