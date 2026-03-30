@@ -9,6 +9,7 @@ node_modules/
 
 # Data - raw and large files stay local, never committed
 data/discovery/subreddit_metadata_raw/
+data/reference/
 data/raw/
 data/filtered/
 *.zst

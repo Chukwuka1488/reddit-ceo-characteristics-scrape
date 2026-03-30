@@ -25,5 +25,10 @@ SUBREDDITS_DB = DISCOVERY_DIR / "subreddits.duckdb"
 DUCKDB_MEMORY_LIMIT = "20GB"
 DUCKDB_THREADS = 8
 
+# Reference data
+SNP1500_XLS = DISCOVERY_DIR / "snp1500.xls"
+CEO_UNIVERSE_PARQUET = REFERENCE_DIR / "ceo_universe.parquet"
+SEARCH_PATTERNS_PARQUET = REFERENCE_DIR / "search_patterns.parquet"
+
 # Processing
 BATCH_SIZE = 10_000
