@@ -12,6 +12,7 @@ data/discovery/subreddit_metadata_raw/
 data/reference/
 data/raw/
 data/filtered/
+data/filtered_clean/
 *.zst
 *.duckdb
 *.duckdb.wal
@@ -29,6 +30,9 @@ data/filtered/
 # Research papers (binary, not versioned)
 *.docx
 *.pdf
+
+# Jupyter
+.ipynb_checkpoints/
 
 # Pytest
 .pytest_cache/
