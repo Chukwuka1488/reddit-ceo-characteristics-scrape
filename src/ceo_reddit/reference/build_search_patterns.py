@@ -23,6 +23,78 @@ COMPANY_SUFFIXES = re.compile(
     re.IGNORECASE,
 )
 
+# Common nicknames: formal_first_name → [nicknames]
+NICKNAMES: dict[str, list[str]] = {
+    "Timothy": ["Tim"],
+    "William": ["Bill", "Will"],
+    "Robert": ["Bob", "Rob"],
+    "James": ["Jim", "Jamie"],
+    "Richard": ["Rich", "Rick", "Dick"],
+    "Thomas": ["Tom"],
+    "Daniel": ["Dan"],
+    "Michael": ["Mike"],
+    "Stephen": ["Steve"],
+    "Steven": ["Steve"],
+    "Joseph": ["Joe"],
+    "Andrew": ["Andy", "Drew"],
+    "Kenneth": ["Ken"],
+    "Patrick": ["Pat"],
+    "Edward": ["Ed"],
+    "Lawrence": ["Larry"],
+    "Donald": ["Don"],
+    "Gregory": ["Greg"],
+    "Christopher": ["Chris"],
+    "Frederick": ["Fred"],
+    "Benjamin": ["Ben"],
+    "Margaret": ["Meg"],
+    "Patricia": ["Pat"],
+    "Elizabeth": ["Liz", "Beth"],
+    "Jennifer": ["Jen"],
+    "Christine": ["Chris"],
+    "Alexander": ["Alex"],
+    "Gerald": ["Gerry"],
+    "Gerard": ["Gerry"],
+    "David": ["Dave"],
+    "Charles": ["Chuck", "Charlie"],
+    "Clifton": ["Cliff"],
+}
+
+# Short company names that people actually use on Reddit
+# Maps cleaned_company_name → [short_names]
+COMPANY_SHORT_NAMES: dict[str, list[str]] = {
+    "Costco Wholesale": ["Costco"],
+    "Berkshire Hathaway": ["Berkshire"],
+    "Jpmorgan Chase &": ["JPMorgan", "JP Morgan", "Chase"],
+    "Bank Of America": ["BofA", "Bank of America"],
+    "Johnson & Johnson": ["J&J"],
+    "Procter & Gamble": ["P&G"],
+    "Coca-Cola": ["Coke"],
+    "Alphabet": ["Google"],
+    "Meta Platforms": ["Meta", "Facebook"],
+    "Amazon.Com": ["Amazon"],
+    "Palo Alto Networks": ["Palo Alto"],
+    "American Express": ["Amex"],
+    "At&T": ["AT&T"],
+    "Hewlett Packard Enterprise": ["HPE"],
+    "General Motors": ["GM"],
+    "General Electric": ["GE"],
+    "Ge Aerospace": ["GE", "GE Aerospace"],
+    "Mastercard": ["Mastercard"],
+    "Unitedhealth": ["UnitedHealth"],
+    "Walt Disney": ["Disney"],
+    "Disney (Walt)": ["Disney"],
+    "Charles Schwab": ["Schwab"],
+    "Morgan Stanley": ["Morgan Stanley"],
+    "Goldman Sachs": ["Goldman"],
+    "Wells Fargo &": ["Wells Fargo"],
+    "Colgate-Palmolive": ["Colgate"],
+    "Caterpillar": ["CAT"],
+    "International Business Machines": ["IBM"],
+    "Paypal": ["PayPal"],
+    "Dollar General": ["Dollar General"],
+    "Dollar Tree": ["Dollar Tree"],
+}
+
 
 def clean_company_name(name: str) -> str:
     """Strip common suffixes for a shorter, more recognizable company name."""
@@ -64,15 +136,27 @@ def build_name_variants(row: pd.Series) -> list[dict]:
         if first_last != full:
             add("first_last", first_last)
 
-    # 3. Last, First (reversed — sometimes used in formal contexts)
+    # 3. Nickname Last (e.g., "Tim Cook" for Timothy Cook)
+    if isinstance(first, str) and isinstance(last, str):
+        nicknames = NICKNAMES.get(first.strip(), [])
+        for nick in nicknames:
+            add("nickname_last", f"{nick} {last.strip()}")
+
+    # 4. Last, First (reversed — sometimes used in formal contexts)
     if isinstance(first, str) and isinstance(last, str):
         add("last_first", f"{last.strip()}, {first.strip()}")
 
-    # 4. "CEO of {Company}" (e.g., "CEO of Berkshire Hathaway")
+    # 5. "CEO of {Company}" (e.g., "CEO of Berkshire Hathaway")
     add("ceo_of_company", f"CEO of {company_clean}")
 
-    # 5. "{Company} CEO" (e.g., "Berkshire Hathaway CEO")
+    # 6. "{Company} CEO" (e.g., "Berkshire Hathaway CEO")
     add("company_ceo", f"{company_clean} CEO")
+
+    # 7. Short company name variants (e.g., "CEO of Costco", "Costco CEO")
+    short_names = COMPANY_SHORT_NAMES.get(company_clean, [])
+    for short in short_names:
+        add("ceo_of_company_short", f"CEO of {short}")
+        add("company_ceo_short", f"{short} CEO")
 
     return variants
 
