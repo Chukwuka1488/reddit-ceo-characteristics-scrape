@@ -30,6 +30,11 @@ DUCKDB_THREADS = 8
 SNP1500_XLS = DISCOVERY_DIR / "snp1500.xls"
 CEO_UNIVERSE_PARQUET = REFERENCE_DIR / "ceo_universe.parquet"
 SEARCH_PATTERNS_PARQUET = REFERENCE_DIR / "search_patterns.parquet"
+EARNINGS_TRANSCRIPTS_PARQUET = REFERENCE_DIR / "earnings_transcripts.parquet"
+CEO_UTTERANCES_PARQUET = REFERENCE_DIR / "ceo_utterances.parquet"
+CEO_UTTERANCES_DICT_SCORED_PARQUET = REFERENCE_DIR / "ceo_utterances_dict_scored.parquet"
+TRANSCRIPT_EXTRACTION_REPORT = REPORTS_DIR / "transcript_extraction_report.json"
+CEO_QUARTER_DICT_SCORES_CSV = REPORTS_DIR / "ceo_quarter_dict_scores.csv"
 
 # Raw subreddit data
 RAW_SUBREDDITS_DIR = RAW_DIR / "reddit" / "subreddits25"
