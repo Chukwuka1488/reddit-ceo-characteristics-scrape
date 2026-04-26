@@ -673,7 +673,7 @@ successfully and to report results to co-authors.
 ## After Running
 
 1. **Download from Drive to local machine:**
-   - `ceo_mentions_dual_scored.parquet` → `data/reference/`
+   - `ceo_mentions_dual_scored.parquet` → `data/processed/`
    - `ceo_year_dual_scores.csv` → `data/reports/`
 
 2. **Next pipeline steps:**

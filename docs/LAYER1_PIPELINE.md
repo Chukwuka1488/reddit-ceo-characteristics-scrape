@@ -10,7 +10,7 @@ of all CEO-relevant Reddit comments 2005-2025
 **0A — CEO Universe Table**
 
 - Source: ExecuComp via WRDS
-- Output: `data/reference/ceo_universe.parquet`
+- Output: `data/processed/ceo_universe.parquet`
 - Schema: company, ticker, ceo_legal_name, ceo_common_name, ceo_name_variants[],
   sp500_entry_date, sp500_exit_date, ceo_start_date, ceo_end_date
 - ~1000+ CEO-company-year tuples
@@ -18,7 +18,7 @@ of all CEO-relevant Reddit comments 2005-2025
 **0B — CEO Name Search Patterns**
 
 - Input: CEO Universe Table
-- Output: `data/reference/search_patterns.parquet`
+- Output: `data/processed/search_patterns.parquet`
 - Variants per CEO: full name, reversed name, "CEO of {company}", "{company}
   CEO", company + "CEO"
 
@@ -37,7 +37,7 @@ analyze and filter for relevance.
 - **Command:**
   ```bash
   aria2c \
-    --dir=data/discovery/subreddit_metadata_raw \
+    --dir=data/inputs/subreddit_metadata_raw \
     --seed-time=0 \
     "magnet:?xt=urn:btih:5d0bf258a025a5b802572ddc29cde89bf093185c&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
   ```
@@ -58,7 +58,7 @@ analyze and filter for relevance.
   python3 -m src.ceo_reddit.discovery.load_subreddit_metadata
   ```
 - **Result:** 21,865,531 rows loaded in 1.3 minutes (284,695 rows/sec).
-- **Output:** `data/discovery/subreddits.duckdb`
+- **Output:** `data/processed/subreddits.duckdb`
 - **Key lesson:** Initial approach used Python `zstandard` + `json.loads` +
   `executemany` at 160 rows/sec (would have taken 38 hours). Letting DuckDB do
   the work natively was 175x faster.
@@ -84,11 +84,11 @@ earliest_comment_at  BIGINT   — first comment timestamp
 
 ### Step 1C — Analyze and filter (IN PROGRESS)
 
-- **Tool:** DBeaver connected to `data/discovery/subreddits.duckdb`
+- **Tool:** DBeaver connected to `data/processed/subreddits.duckdb`
 - **Goal:** Query 22M subreddits to find those relevant to business, finance,
   company discussion, and CEO mentions.
 - **Process:** Iterative — run queries, review results, refine filters.
-- **Output:** `data/discovery/candidate_subreddits.csv` (subreddit, category,
+- **Output:** `data/processed/candidate_subreddits.csv` (subreddit, category,
   subscribers, num_comments, description, decision)
 - **Expected result:** ~92 candidate subreddits for human review
 
@@ -178,7 +178,7 @@ Result:
 
 **Query 4 — S&P 500 company name/ticker matching against subreddits:**
 
-- Data source: `data/discovery/snp1500.xls` (ExecuComp S&P 1500, 2010-2025)
+- Data source: `data/inputs/snp1500.xls` (ExecuComp S&P 1500, 2010-2025)
 - Filtered to `spcode = 'SP'` (S&P 500) → 499 unique companies, 3,276 CEO rows
 - Extracted company first-word brands + tickers, matched against subreddit names
 - Result: **169 subreddit matches**, but many false positives
@@ -224,7 +224,7 @@ Manually checked for known large company subs not caught by automated matching
 - `blackstone` → Blackstone griddle cooking sub
 - All generic word matches (`de`, `boston`, `texas`, `cat`, etc.)
 
-**Final candidate list: `data/discovery/candidate_subreddits.csv`**
+**Final candidate list: `data/processed/candidate_subreddits.csv`**
 
 92 subreddits across 8 categories, 535M total comments:
 
@@ -451,7 +451,7 @@ lens):
 - Total comments across approved subs: 512M
 - Total posts across approved subs: 30.5M
 - All 81 approved subs confirmed present in DuckDB metadata (none missing)
-- Updated CSV: `data/discovery/candidate_subreddits.csv` (decision column
+- Updated CSV: `data/processed/candidate_subreddits.csv` (decision column
   populated)
 
 **Step 1 is COMPLETE.**
@@ -464,8 +464,8 @@ When resuming this project, pick up from here in order:
 
 **1. Build the CEO Universe Table (Step 0A)**
 
-- Process `data/discovery/snp1500.xls` into
-  `data/reference/ceo_universe.parquet`
+- Process `data/inputs/snp1500.xls` into
+  `data/processed/ceo_universe.parquet`
 - Filter to S&P 500 (`spcode = 'SP'`), extract unique (company, ticker, CEO
   name, CEO start/end dates) tuples
 - Generate name variants for each CEO (Step 0B) for use in Reddit comment

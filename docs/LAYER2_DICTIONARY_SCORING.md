@@ -3,7 +3,7 @@
 **Date:** 2026-04-06 **Input:** `data/filtered_clean/ceo_mentions_clean.parquet`
 (679,110 rows) **Output:**
 
-- `data/reference/ceo_mentions_dict_scored.parquet` (per-comment scores)
+- `data/processed/ceo_mentions_dict_scored.parquet` (per-comment scores)
 - `data/reports/ceo_year_dict_scores.csv` (CEO-year aggregates)
 
 **Script:** `src/ceo_reddit/scoring/dictionary_scorer.py` **Runtime:** 38

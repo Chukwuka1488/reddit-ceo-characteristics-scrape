@@ -15,8 +15,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from configs.settings import (
+    CANDIDATE_SUBREDDITS_CSV,
     CHECKPOINT_DIR,
-    DISCOVERY_DIR,
     FILTER_BATCH_SIZE,
     FILTERED_DIR,
     RAW_SUBREDDITS_DIR,
@@ -289,7 +289,7 @@ def run_filter() -> None:
         return
 
     # Load approved subreddits
-    candidates = pd.read_csv(DISCOVERY_DIR / "candidate_subreddits.csv")
+    candidates = pd.read_csv(CANDIDATE_SUBREDDITS_CSV)
     approved_subs = set(candidates[candidates["decision"] == "yes"]["subreddit"].tolist())
     logger.info("Approved subreddits: %d", len(approved_subs))
 

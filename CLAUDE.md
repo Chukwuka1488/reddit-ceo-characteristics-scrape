@@ -88,7 +88,7 @@ discrepancy.
 ## Data
 
 - Source: Academic Torrents per-subreddit Reddit dumps (zstd NDJSON)
-- Subreddit metadata: `data/discovery/subreddit_metadata_raw/`
+- Subreddit metadata: `data/inputs/subreddit_metadata_raw/`
 - Raw .zst downloads go in `data/raw/` (temporary, deleted after filtering)
 - Filtered output: `data/filtered/` (Parquet, partitioned by year/subreddit)
 - Never commit data files — they are in .gitignore

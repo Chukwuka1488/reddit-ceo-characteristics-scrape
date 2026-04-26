@@ -8,8 +8,12 @@ __pycache__/
 node_modules/
 
 # Data - raw and large files stay local, never committed
-data/discovery/subreddit_metadata_raw/
-data/reference/
+data/inputs/subreddit_metadata_raw/
+data/inputs/Loughran-McDonald_MasterDictionary_1993-2025.csv
+data/inputs/earnings_transcripts.parquet
+data/processed/*.parquet
+data/processed/*.duckdb
+data/processed/*.duckdb.wal
 data/raw/
 data/filtered/
 data/filtered_clean/

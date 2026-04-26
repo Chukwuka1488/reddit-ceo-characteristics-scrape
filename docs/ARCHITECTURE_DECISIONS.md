@@ -113,7 +113,7 @@ wrong, and the paper's methodology is indefensible in peer review.
 
 **Decision:** ExecuComp via WRDS (university access confirmed).
 
-- **Data available:** `data/discovery/snp1500.xls` — S&P 1500 companies,
+- **Data available:** `data/inputs/snp1500.xls` — S&P 1500 companies,
   2010-2025, 31,281 rows, 107 columns
 - **S&P 500 subset:** 499 unique companies, 3,276 CEO rows (`spcode = 'SP'`)
 - **Key fields:** ticker, coname, exec_fullname, exec_fname, exec_lname,
@@ -190,7 +190,7 @@ baselines alongside FinBERT model-based scoring. If FinBERT and dictionary
 methods agree directionally on a CEO's trait score, this strengthens construct
 validity.
 
-**CEO Integrity Dictionary (`data/discovery/CEO_Integrity_Dictionary.csv`)**
+**CEO Integrity Dictionary (`data/inputs/CEO_Integrity_Dictionary.csv`)**
 
 - **Source:** Hennig, Bauer & Laamanen (2025) — "The role of CEO integrity in
   M&A decision-making", Strategic Management Journal
@@ -203,7 +203,7 @@ validity.
   226-word integrity dictionary" — the full 226-word version may include
   inflected forms; our 140-row file contains root words.
 
-**CEO Narcissism Dictionary (`data/discovery/CEO_Narcissism_Dictionary.csv`)**
+**CEO Narcissism Dictionary (`data/inputs/CEO_Narcissism_Dictionary.csv`)**
 
 - **Source:** Derived from Loughran-McDonald financial text word lists, focused
   on narcissism-related terms
@@ -286,11 +286,11 @@ pip install datasets
 python3 -c "
 from datasets import load_dataset
 ds = load_dataset('Bose345/sp500_earnings_transcripts', split='train')
-ds.to_parquet('data/reference/earnings_transcripts.parquet')
+ds.to_parquet('data/inputs/earnings_transcripts.parquet')
 "
 ```
 
-- Output: `data/reference/earnings_transcripts.parquet` (~1.82GB)
+- Output: `data/inputs/earnings_transcripts.parquet` (~1.82GB)
 - When needed: after Layer 1 is complete, before Layer 2 scoring begins
 
 **Loughran-McDonald dictionaries (overconfidence baseline):**
@@ -299,7 +299,7 @@ ds.to_parquet('data/reference/earnings_transcripts.parquet')
 - Available free from https://sraf.nd.edu/loughranmcdonald-master-dictionary/
 - Needed for Layer 2 Pass 1 overconfidence scoring
 - Contains positive/negative word lists designed for financial text
-- Download the master dictionary CSV and place in `data/reference/`
+- Download the master dictionary CSV and place in `data/processed/`
 
 ---
 

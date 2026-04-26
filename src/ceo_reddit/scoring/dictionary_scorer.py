@@ -16,21 +16,18 @@ from pathlib import Path
 import pandas as pd
 
 from configs.settings import (
-    DISCOVERY_DIR,
+    CEO_MENTIONS_DICT_SCORED_PARQUET,
     FILTERED_CLEAN_PARQUET,
-    REFERENCE_DIR,
+    INTEGRITY_DICT_PATH,
+    LM_DICT_PATH,
+    NARCISSISM_DICT_PATH,
     REPORTS_DIR,
 )
 
 logger = logging.getLogger(__name__)
 
-# Dictionary file paths
-LM_DICT_PATH = REFERENCE_DIR / "Loughran-McDonald_MasterDictionary_1993-2025.csv"
-INTEGRITY_DICT_PATH = DISCOVERY_DIR / "CEO_Integrity_Dictionary.csv"
-NARCISSISM_DICT_PATH = DISCOVERY_DIR / "CEO_Narcissism_Dictionary.csv"
-
-# Output paths
-SCORED_OUTPUT = REFERENCE_DIR / "ceo_mentions_dict_scored.parquet"
+# Output path (sourced from settings)
+SCORED_OUTPUT = CEO_MENTIONS_DICT_SCORED_PARQUET
 
 
 def _load_lm_words() -> dict[str, set[str]]:
