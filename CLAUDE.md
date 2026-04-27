@@ -72,8 +72,13 @@ discrepancy.
 
 - **Atomic Commits:** One logical change per commit. Don't mix "add loader
   script" with "fix gitignore."
-- **Never Commit Data:** All data files are in .gitignore. Code is versioned,
-  data is not.
+- **Never Commit Transient Data:** Multi-GB Reddit dumps, scored parquets, and
+  other pipeline outputs stay local — they're in `.gitignore`. Stable reference
+  inputs small enough to commit (dictionaries, the CEO universe, the Layer 1
+  Reddit aggregate) ARE committed and explicitly un-ignored, so the repo is
+  runnable from a fresh clone. The line is: anything that's an input to or
+  stable output of the analysis can be committed if small; anything that's
+  intermediate or large stays out.
 - **Document Decisions:** Architecture tradeoffs go in
   ARCHITECTURE_DECISIONS.md, not in code comments.
 

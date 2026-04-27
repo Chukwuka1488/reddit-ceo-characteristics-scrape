@@ -7,9 +7,10 @@ __pycache__/
 # Node (prettier)
 node_modules/
 
-# Data - raw and large files stay local, never committed
+# Data — transient or large pipeline files stay local. Stable reference inputs
+# small enough to commit are explicitly un-ignored below so the repo is
+# runnable from a fresh clone.
 data/inputs/subreddit_metadata_raw/
-data/inputs/Loughran-McDonald_MasterDictionary_1993-2025.csv
 data/inputs/earnings_transcripts.parquet
 data/processed/*.parquet
 data/processed/*.duckdb
@@ -17,9 +18,18 @@ data/processed/*.duckdb.wal
 data/raw/
 data/filtered/
 data/filtered_clean/
+data/checkpoints/
+data/reports/
+data/filtered_ceo_mentions*.csv
 *.zst
 *.duckdb
 *.duckdb.wal
+
+# Reference inputs that ARE committed (override the ignores above)
+!data/inputs/Loughran-McDonald_MasterDictionary_1993-2025.csv
+!data/processed/ceo_universe.parquet
+!data/processed/candidate_subreddits.csv
+!data/ceo_year_finbert_abc_merged_updated.csv
 
 # IDE
 .idea/

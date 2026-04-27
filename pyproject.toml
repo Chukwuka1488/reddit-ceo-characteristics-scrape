@@ -6,6 +6,27 @@ requires-python = ">=3.12"
 dependencies = [
     "duckdb>=1.5.0",
     "zstandard>=0.25.0",
+    "pandas>=2.3",
+    "pyarrow>=21.0",
+    "xlrd>=2.0",                 # reads snp1500.xls (legacy Excel format)
+    "pyahocorasick>=2.0",        # CEO-name multi-pattern matcher in filter pipeline
+]
+
+[project.optional-dependencies]
+# Local execution of the FinBERT/RoBERTa scoring instead of Colab. The Colab
+# notebooks install these themselves; this group is only needed if running on
+# a local GPU.
+ml = [
+    "torch>=2.0",
+    "transformers>=4.40",
+    "fastparquet>=2024.0",
+    "scipy>=1.13",
+    "datasets>=4.0",             # HuggingFace fetch of earnings_transcripts.parquet
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+    "nbformat>=5.10",            # validate Colab notebooks in CI
 ]
 
 [tool.setuptools.packages.find]
