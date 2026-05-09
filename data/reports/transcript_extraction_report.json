@@ -1,0 +1,19 @@
+{
+  "n_transcripts": 33362,
+  "n_with_tenured_ceo": 24947,
+  "n_with_ceo_utterance_matched": 21363,
+  "match_rate_overall": 0.6403393081949523,
+  "match_rate_among_tenured": 0.8563354311139616,
+  "n_calls_no_qa_detected": 184,
+  "n_ceo_utterances": 433819,
+  "n_unique_ceos": 999,
+  "n_unique_tickers": 476,
+  "section_counts": {
+    "qa": 399909,
+    "prepared": 33910
+  },
+  "words_per_section": {
+    "prepared": 29121272,
+    "qa": 47211754
+  }
+}

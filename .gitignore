@@ -19,7 +19,6 @@ data/raw/
 data/filtered/
 data/filtered_clean/
 data/checkpoints/
-data/reports/
 data/filtered_ceo_mentions*.csv
 *.zst
 *.duckdb
@@ -30,6 +29,7 @@ data/filtered_ceo_mentions*.csv
 !data/processed/ceo_universe.parquet
 !data/processed/candidate_subreddits.csv
 !data/ceo_year_finbert_abc_merged_updated.csv
+!data/ceo_year_finbert_scores.csv
 
 # IDE
 .idea/
